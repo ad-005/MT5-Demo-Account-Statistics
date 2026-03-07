@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MT5 Demo Stats - Trades</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <h1>MT5 Stats</h1>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/trades" class="active">Trades</a>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <h2 style="margin-bottom:20px">Trade History</h2>
+
+            <div class="section">
+                <div class="form-group" style="margin-bottom:16px">
+                    <label for="account-select">Account</label>
+                    <select id="account-select" style="width:300px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;">
+                        <option value="">-- Select Account --</option>
+                    </select>
+                </div>
+
+                <form id="filter-form" class="filters-bar">
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" name="start_date">
+                    </div>
+                    <div class="form-group">
+                        <label>End Date</label>
+                        <input type="date" name="end_date">
+                    </div>
+                    <div class="form-group">
+                        <label>Direction</label>
+                        <select name="direction">
+                            <option value="">All</option>
+                            <option value="buy">Buy</option>
+                            <option value="sell">Sell</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <input type="text" name="symbol" placeholder="e.g. EURUSD">
+                    </div>
+                    <div class="form-group">
+                        <label>Min Profit</label>
+                        <input type="number" name="min_profit" step="0.01" placeholder="-100">
+                    </div>
+                    <div class="form-group">
+                        <label>Max Profit</label>
+                        <input type="number" name="max_profit" step="0.01" placeholder="1000">
+                    </div>
+                    <div class="form-group" style="display:flex;gap:8px;align-self:flex-end">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <button type="button" class="btn" id="btn-reset">Reset</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="trades-content">
+                <div class="empty-state">
+                    <h3>Select an Account</h3>
+                    <p>Choose an account above to view and filter trades.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/trades.js"></script>
+</body>
+</html>
