@@ -488,10 +488,14 @@ body {
     border-bottom-color: var(--bg-surface);
 }
 
-/* Show tooltip on card hover and keyboard focus */
-.stat-card[data-tooltip]:hover .stat-tooltip,
-.stat-card[data-tooltip]:focus-within .stat-tooltip {
+/* Show tooltip when toggled open via JS */
+.stat-tooltip.visible {
     display: block;
+}
+
+/* Raise the entire card above siblings when its tooltip is open */
+.stat-card.tooltip-active {
+    z-index: 100;
 }
 
 /* ========================================================================

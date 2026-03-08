@@ -113,7 +113,32 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("modal-close").addEventListener("click", closeModal);
     document.getElementById("modal-cancel").addEventListener("click", closeModal);
     document.getElementById("account-form").addEventListener("submit", onAddAccount);
+
+    // Dismiss any open tooltip when clicking outside
+    document.addEventListener("click", () => {
+        document.querySelectorAll(".stat-tooltip.visible").forEach(t => {
+            t.classList.remove("visible");
+            t.closest(".stat-card").classList.remove("tooltip-active");
+        });
+    });
 });
+
+function toggleTooltip(iconEl) {
+    const card = iconEl.closest(".stat-card");
+    const tooltip = card.querySelector(".stat-tooltip");
+    if (!tooltip) return;
+
+    // Close all other tooltips and lower their cards
+    document.querySelectorAll(".stat-tooltip.visible").forEach(t => {
+        if (t !== tooltip) {
+            t.classList.remove("visible");
+            t.closest(".stat-card").classList.remove("tooltip-active");
+        }
+    });
+
+    const isOpen = tooltip.classList.toggle("visible");
+    card.classList.toggle("tooltip-active", isOpen);
+}
 
 async function checkDocker() {
     try {
@@ -401,7 +426,7 @@ function statCard(label, value, positive = null, negative = false, benchmark = n
         ? `<span class="stat-tooltip" role="tooltip">${tooltipText}</span>`
         : "";
     const infoIcon = tooltipText
-        ? `<span class="stat-info-icon" aria-hidden="true">i</span>`
+        ? `<span class="stat-info-icon" onclick="event.stopPropagation();toggleTooltip(this)" aria-label="Info">i</span>`
         : "";
 
     // Category for color accent
