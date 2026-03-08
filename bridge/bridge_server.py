@@ -1,13 +1,16 @@
 """
 MT5 Bridge Server — runs on Linux side inside the Docker container.
-Communicates with mt5_worker.py running under Wine's Python via subprocess stdin/stdout.
-Exposes trade data over HTTP so the main backend can fetch it.
+Reads JSON files exported by the MQL5 DataExporter EA running inside
+the MT5 terminal. Exposes trade data over HTTP so the main backend
+can fetch it.
 """
 import asyncio
 import json
 import logging
 import os
-from typing import Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Union
 
 from fastapi import FastAPI, Query
 import uvicorn
@@ -17,84 +20,54 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MT5 Bridge")
 
-_worker_proc: Optional[asyncio.subprocess.Process] = None
-_worker_lock = asyncio.Lock()
+# MT5 writes files to MQL5/Files/ directory. Set via env var by setup_and_run.sh.
+MT5_FILES_DIR = Path(os.environ.get("MT5_FILES_DIR", "/tmp/mt5files"))
+
+STATUS_FILE = "status.json"
+ACCOUNT_FILE = "account_info.json"
+TRADES_FILE = "trades.json"
+
+# How long to wait for EA to produce data on startup (seconds)
+STARTUP_TIMEOUT = int(os.environ.get("STARTUP_TIMEOUT", "300"))
 
 
-async def _start_worker():
-    global _worker_proc
-    wine_python = os.environ.get(
-        "WINE_PYTHON", "wine python"
-    )
-    cmd = f"{wine_python} /app/mt5_worker.py"
-    _worker_proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    logger.info(f"Worker started (pid={_worker_proc.pid})")
-
-
-async def _send_command(cmd: str, params: dict = None) -> dict:
-    async with _worker_lock:
-        if _worker_proc is None or _worker_proc.returncode is not None:
-            await _start_worker()
-
-        request = json.dumps({"cmd": cmd, "params": params or {}}) + "\n"
-        _worker_proc.stdin.write(request.encode())
-        await _worker_proc.stdin.drain()
-
-        line = await asyncio.wait_for(_worker_proc.stdout.readline(), timeout=30)
-        if not line:
-            return {"error": "Worker returned empty response"}
-
-        return json.loads(line.decode())
+def _read_json(filename: str) -> Optional[Union[dict, list]]:
+    """Read and parse a JSON file from the MT5 Files directory."""
+    filepath = MT5_FILES_DIR / filename
+    try:
+        with open(filepath, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        logger.debug(f"Could not read {filepath}: {e}")
+        return None
 
 
 @app.on_event("startup")
 async def startup():
-    # Wait for MT5 terminal to start up
-    await asyncio.sleep(5)
-
-    await _start_worker()
-
-    # Initialize MT5 connection in the worker
-    retries = 10
-    for i in range(retries):
-        try:
-            result = await _send_command("init")
-            if result.get("ok"):
-                logger.info("MT5 worker initialized successfully")
-                return
-            logger.warning(f"MT5 init attempt {i+1}/{retries}: {result.get('error')}")
-        except Exception as e:
-            logger.warning(f"MT5 init attempt {i+1}/{retries} failed: {e}")
-        await asyncio.sleep(3)
-    logger.error("Failed to initialize MT5 worker after retries")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    try:
-        await _send_command("shutdown")
-    except Exception:
-        pass
-    if _worker_proc and _worker_proc.returncode is None:
-        _worker_proc.terminate()
+    logger.info(f"Waiting for EA data in {MT5_FILES_DIR} (timeout={STARTUP_TIMEOUT}s)")
+    for i in range(STARTUP_TIMEOUT):
+        status = _read_json(STATUS_FILE)
+        if status and status.get("status") == "ok":
+            logger.info(f"EA data available after {i+1}s — login: {status.get('login')}")
+            return
+        await asyncio.sleep(1)
+    logger.warning(f"EA data not available after {STARTUP_TIMEOUT}s — starting anyway")
 
 
 @app.get("/health")
 async def health():
-    try:
-        return await _send_command("health")
-    except Exception:
-        return {"status": "degraded"}
+    status = _read_json(STATUS_FILE)
+    if status and status.get("status") == "ok":
+        return {"status": "ok", "login": status.get("login")}
+    return {"status": "degraded"}
 
 
 @app.get("/account_info")
 async def account_info():
-    return await _send_command("account_info")
+    data = _read_json(ACCOUNT_FILE)
+    if data:
+        return data
+    return {"error": "No account info available"}
 
 
 @app.get("/trades")
@@ -102,12 +75,27 @@ async def get_trades(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
 ):
-    params = {}
-    if start_date:
-        params["start_date"] = start_date
-    if end_date:
-        params["end_date"] = end_date
-    return await _send_command("trades", params)
+    trades = _read_json(TRADES_FILE)
+    if trades is None:
+        return []
+
+    # Apply date filtering if requested
+    if start_date or end_date:
+        filtered = []
+        for trade in trades:
+            close_time = trade.get("close_time", "")
+            if not close_time:
+                continue
+            # Compare as strings — works because format is YYYY-MM-DD HH:MM:SS
+            close_date = close_time[:10]
+            if start_date and close_date < start_date:
+                continue
+            if end_date and close_date > end_date:
+                continue
+            filtered.append(trade)
+        return filtered
+
+    return trades
 
 
 if __name__ == "__main__":
