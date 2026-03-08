@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
 from backend.models import Trade, TradingStats
-from backend.services import account_service, mt5_bridge_client, stats_service
+from backend.services import account_service, docker_service, mt5_bridge_client, stats_service
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -18,6 +18,9 @@ async def get_stats(
         raise HTTPException(404, "Account not found")
     if not acc.container_port:
         raise HTTPException(400, "Container not running. Start it first.")
+
+    # Ensure Colima port forwarding hasn't dropped (ARM Mac QEMU workaround)
+    await docker_service.ensure_port_forwarded(acc.container_port)
 
     try:
         raw_trades = await mt5_bridge_client.fetch_trades(
