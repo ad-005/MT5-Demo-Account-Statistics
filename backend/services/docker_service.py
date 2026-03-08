@@ -208,7 +208,16 @@ async def check_docker_environment() -> DockerStatus:
 
     # Check daemon
     if _system == "Darwin":
-        if shutil.which("colima"):
+        if _is_arm() and shutil.which("colima"):
+            # On ARM Macs, we use a dedicated x86_64 Colima profile.
+            # Check that profile specifically, not the default one.
+            x86_ok, x86_msg = await ensure_colima_x86()
+            if not x86_ok:
+                return DockerStatus(
+                    docker_available=True,
+                    message=x86_msg,
+                )
+        elif shutil.which("colima"):
             code, _, _ = await _run("colima", "status")
             if code != 0:
                 return DockerStatus(
@@ -224,16 +233,6 @@ async def check_docker_environment() -> DockerStatus:
                     "If using Docker Desktop: open Docker Desktop."
                 ),
             )
-
-        # On ARM Macs, check for x86_64 Colima profile
-        if _is_arm() and shutil.which("colima"):
-            x86_ok, x86_msg = await ensure_colima_x86()
-            if not x86_ok:
-                return DockerStatus(
-                    docker_available=True,
-                    daemon_running=True,
-                    message=x86_msg,
-                )
 
     elif _system == "Windows":
         if not await _docker_daemon_running():
