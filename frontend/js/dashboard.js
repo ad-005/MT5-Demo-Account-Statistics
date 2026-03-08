@@ -439,15 +439,22 @@ function renderScoreCard(stats) {
             : c.statusCls === "at" ? "At target"
             : (c.bench.higher ? "Below" : "Exceeds");
 
+        // Extract short target label from benchmark (e.g. ">= 50%" from "target >= 50%")
+        const shortTarget = c.bench.label.replace(/^target\s*/i, "");
+
         return `
             <div class="score-comp" data-card-label="${c.bench.statCardLabel}">
                 <div>
                     <div class="score-comp__name">${c.bench.displayName}</div>
-                    <div class="score-comp__meta">${formatted} — ${c.bench.label}</div>
+                    <div class="score-comp__meta">${formatted}</div>
                 </div>
                 <div class="score-comp__bar-wrap">
                     <div class="score-comp__bar-track">
                         <div class="score-comp__bar-fill score-comp__bar-fill--${barCls}" style="width:${c.subScore}%"></div>
+                        <div class="score-comp__target" aria-label="Target: ${c.bench.label}">
+                            <div class="score-comp__target-line"></div>
+                            <span class="score-comp__target-label">${shortTarget}</span>
+                        </div>
                     </div>
                     <span class="score-comp__bar-label">${c.subScore}</span>
                 </div>
