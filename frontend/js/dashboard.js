@@ -48,7 +48,7 @@ const BENCHMARKS = {
         atTolerance: 0.1,
         displayName: "Sortino Ratio",
         statCardLabel: "Sortino Ratio",
-        weight: 0.10,
+        weight: 0,
         format: v => v.toFixed(2),
     },
     max_drawdown_pct: {
@@ -58,28 +58,38 @@ const BENCHMARKS = {
         atTolerance: 1,
         displayName: "Max Drawdown",
         statCardLabel: "Max DD %",
-        weight: 0.15,
+        weight: 0.20,
         format: v => v.toFixed(2) + "%",
     },
     risk_reward_ratio: {
-        target: 2.0,
+        target: 1.5,
         higher: true,
-        label: "target >= 2.0",
-        atTolerance: 0.2,
+        label: "target >= 1.5",
+        atTolerance: 0.15,
         displayName: "R:R Ratio",
         statCardLabel: "R:R Ratio",
-        weight: 0.15,
+        weight: 0.10,
         format: v => v.toFixed(2),
     },
     expectancy: {
-        target: 0,
+        target: 5,
         higher: true,
-        label: "target > 0",
-        atTolerance: 0,
+        label: "target >= $5",
+        atTolerance: 1,
         displayName: "Expectancy",
         statCardLabel: "Expectancy",
         weight: 0.10,
         format: v => "$" + v.toFixed(2),
+    },
+    consistency: {
+        target: 30,
+        higher: false,
+        label: "best trade < 30% of profit",
+        atTolerance: 3,
+        displayName: "Consistency",
+        statCardLabel: "Consistency",
+        weight: 0.10,
+        format: v => v.toFixed(1) + "%",
     },
 };
 
@@ -342,31 +352,38 @@ function evalBenchmark(rawValue, benchmark) {
 /**
  * Compute overall score from raw stats using BENCHMARKS.
  * Each benchmark contributes a 0-100 sub-score weighted by its .weight.
- * The sub-score uses the same target/tolerance logic as the stat cards:
- *   above → 85-100, at → 65-75, below → 0-55
+ * Methodology informed by prop firm evaluation criteria (FTMO, Myfxbook)
+ * and institutional risk-adjusted performance standards (CFA/GIPS).
+ *
+ * Consistency metric: largest single win as % of total profit (lower = better).
+ * Drawdown penalty: 0.8x multiplier if DD > 20%, 0.5x if DD > 30% (prop firm hard gates).
+ * Low sample warning: flagged when total_trades < 20.
  */
 function computeOverallScore(stats) {
     const results = [];
     let weightedSum = 0;
 
+    // Compute consistency value: best trade as % of total profit
+    // Lower is better — a high value means one trade dominates profits
+    const consistencyValue = stats.total_profit > 0
+        ? (stats.largest_win / stats.total_profit) * 100
+        : 100; // No profit = worst consistency
+
     for (const [key, bench] of Object.entries(BENCHMARKS)) {
         if (!bench.weight) continue;
-        const value = stats[key] ?? 0;
+
+        // Use computed consistency value; all other metrics come from stats
+        const value = key === "consistency" ? consistencyValue : (stats[key] ?? 0);
         const { statusCls } = evalBenchmark(value, bench);
 
         let subScore;
         if (bench.higher) {
-            if (bench.target === 0) {
-                // Special case: expectancy target is 0 (just needs to be positive)
-                subScore = value > 0 ? Math.min(100, 70 + Math.min(value, 100) * 0.3) : Math.max(0, 50 + value);
-            } else {
-                const ratio = value / bench.target;
-                if (ratio >= 2) subScore = 100;
-                else if (ratio >= 1) subScore = 70 + (ratio - 1) * 30;
-                else subScore = Math.max(0, ratio * 70);
-            }
+            const ratio = value / bench.target;
+            if (ratio >= 2) subScore = 100;
+            else if (ratio >= 1) subScore = 70 + (ratio - 1) * 30;
+            else subScore = Math.max(0, ratio * 70);
         } else {
-            // Lower is better (drawdown)
+            // Lower is better (drawdown, consistency)
             if (value <= 0) subScore = 100;
             else if (value <= bench.target) subScore = 70 + ((bench.target - value) / bench.target) * 30;
             else subScore = Math.max(0, 70 - ((value - bench.target) / (bench.target * 2)) * 70);
@@ -377,6 +394,14 @@ function computeOverallScore(stats) {
         weightedSum += subScore * bench.weight;
     }
 
+    // Drawdown penalty multiplier (mimics prop firm hard gates)
+    const dd = stats.max_drawdown_pct ?? 0;
+    let ddPenalty = 1.0;
+    if (dd > 30) ddPenalty = 0.5;
+    else if (dd > 20) ddPenalty = 0.8;
+    weightedSum *= ddPenalty;
+
+    const lowSample = stats.total_trades < 20;
     const overall = Math.round(Math.max(1, Math.min(100, weightedSum)));
     let grade;
     if (overall >= 90) grade = "A+";
@@ -388,13 +413,13 @@ function computeOverallScore(stats) {
     else if (overall >= 30) grade = "D";
     else grade = "F";
 
-    return { score: overall, grade, components: results };
+    return { score: overall, grade, components: results, lowSample, ddPenalty };
 }
 
 function renderScoreCard(stats) {
     if (!stats || stats.total_trades === 0) return "";
 
-    const { score, grade, components } = computeOverallScore(stats);
+    const { score, grade, components, lowSample, ddPenalty } = computeOverallScore(stats);
     const colorClass = score >= 70 ? "score-card--green" : score >= 40 ? "score-card--yellow" : "score-card--red";
 
     const radius = 34;
@@ -414,21 +439,38 @@ function renderScoreCard(stats) {
             : c.statusCls === "at" ? "At target"
             : (c.bench.higher ? "Below" : "Exceeds");
 
+        // Extract short target label from benchmark (e.g. ">= 50%" from "target >= 50%")
+        const shortTarget = c.bench.label.replace(/^target\s*/i, "");
+
         return `
             <div class="score-comp" data-card-label="${c.bench.statCardLabel}">
                 <div>
                     <div class="score-comp__name">${c.bench.displayName}</div>
-                    <div class="score-comp__meta">${formatted} — ${c.bench.label}</div>
+                    <div class="score-comp__meta">${formatted}</div>
                 </div>
                 <div class="score-comp__bar-wrap">
                     <div class="score-comp__bar-track">
                         <div class="score-comp__bar-fill score-comp__bar-fill--${barCls}" style="width:${c.subScore}%"></div>
+                        <div class="score-comp__target" aria-label="Target: ${c.bench.label}">
+                            <div class="score-comp__target-line"></div>
+                            <span class="score-comp__target-label">${shortTarget}</span>
+                        </div>
                     </div>
                     <span class="score-comp__bar-label">${c.subScore}</span>
                 </div>
                 <span class="bench-status ${barCls}">${statusLabel}</span>
             </div>`;
     }).join("");
+
+    // Warning badges
+    let badges = "";
+    if (lowSample) {
+        badges += `<span class="score-card__badge score-card__badge--warn">Low sample (${stats.total_trades} trades)</span>`;
+    }
+    if (ddPenalty < 1) {
+        const pctPenalty = Math.round((1 - ddPenalty) * 100);
+        badges += `<span class="score-card__badge score-card__badge--penalty">${pctPenalty}% DD penalty applied</span>`;
+    }
 
     return `
         <div class="score-card ${colorClass}" onclick="toggleScoreBreakdown(this)">
@@ -445,7 +487,7 @@ function renderScoreCard(stats) {
                         <span class="score-card__score">${score}</span>
                         <span class="score-card__grade">${grade}</span>
                     </div>
-                    <div class="score-card__label">Click to see breakdown</div>
+                    <div class="score-card__label">${badges || "Click to see breakdown"}</div>
                 </div>
                 <svg class="score-card__chevron" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
