@@ -16,42 +16,70 @@ const BENCHMARKS = {
         higher: true,
         label: "target >= 50%",
         atTolerance: 2,
+        displayName: "Win Rate",
+        statCardLabel: "Win Rate",
+        weight: 0.15,
+        format: v => v + "%",
     },
     profit_factor: {
         target: 1.5,
         higher: true,
         label: "target >= 1.5",
         atTolerance: 0.1,
+        displayName: "Profit Factor",
+        statCardLabel: "Profit Factor",
+        weight: 0.20,
+        format: v => v.toFixed(2),
     },
     sharpe_ratio: {
         target: 1.0,
         higher: true,
         label: "target >= 1.0",
         atTolerance: 0.1,
+        displayName: "Sharpe Ratio",
+        statCardLabel: "Sharpe Ratio",
+        weight: 0.15,
+        format: v => v.toFixed(2),
     },
     sortino_ratio: {
         target: 1.0,
         higher: true,
         label: "target >= 1.0",
         atTolerance: 0.1,
+        displayName: "Sortino Ratio",
+        statCardLabel: "Sortino Ratio",
+        weight: 0.10,
+        format: v => v.toFixed(2),
     },
     max_drawdown_pct: {
         target: 10,
         higher: false,
         label: "target <= 10%",
         atTolerance: 1,
+        displayName: "Max Drawdown",
+        statCardLabel: "Max DD %",
+        weight: 0.15,
+        format: v => v.toFixed(2) + "%",
     },
     risk_reward_ratio: {
         target: 2.0,
         higher: true,
         label: "target >= 2.0",
         atTolerance: 0.2,
+        displayName: "R:R Ratio",
+        statCardLabel: "R:R Ratio",
+        weight: 0.15,
+        format: v => v.toFixed(2),
     },
     expectancy: {
         target: 0,
         higher: true,
         label: "target > 0",
         atTolerance: 0,
+        displayName: "Expectancy",
+        statCardLabel: "Expectancy",
+        weight: 0.10,
+        format: v => "$" + v.toFixed(2),
     },
 };
 
@@ -294,8 +322,152 @@ async function removeAccount(id) {
     }
 }
 
+/**
+ * Evaluate a benchmark: returns { status: "above"|"at"|"below", statusText, statusCls }
+ * This is the SINGLE evaluation function used by both stat cards and the score breakdown.
+ */
+function evalBenchmark(rawValue, benchmark) {
+    const tol = benchmark.atTolerance ?? 0;
+    const diff = rawValue - benchmark.target;
+
+    if (Math.abs(diff) <= tol) {
+        return { statusCls: "at", statusText: "At target" };
+    } else if (benchmark.higher ? diff > tol : diff < -tol) {
+        return { statusCls: "above", statusText: benchmark.higher ? "Above" : "Within" };
+    } else {
+        return { statusCls: "below", statusText: benchmark.higher ? "Below" : "Exceeds" };
+    }
+}
+
+/**
+ * Compute overall score from raw stats using BENCHMARKS.
+ * Each benchmark contributes a 0-100 sub-score weighted by its .weight.
+ * The sub-score uses the same target/tolerance logic as the stat cards:
+ *   above → 85-100, at → 65-75, below → 0-55
+ */
+function computeOverallScore(stats) {
+    const results = [];
+    let weightedSum = 0;
+
+    for (const [key, bench] of Object.entries(BENCHMARKS)) {
+        if (!bench.weight) continue;
+        const value = stats[key] ?? 0;
+        const { statusCls } = evalBenchmark(value, bench);
+
+        let subScore;
+        if (bench.higher) {
+            if (bench.target === 0) {
+                // Special case: expectancy target is 0 (just needs to be positive)
+                subScore = value > 0 ? Math.min(100, 70 + Math.min(value, 100) * 0.3) : Math.max(0, 50 + value);
+            } else {
+                const ratio = value / bench.target;
+                if (ratio >= 2) subScore = 100;
+                else if (ratio >= 1) subScore = 70 + (ratio - 1) * 30;
+                else subScore = Math.max(0, ratio * 70);
+            }
+        } else {
+            // Lower is better (drawdown)
+            if (value <= 0) subScore = 100;
+            else if (value <= bench.target) subScore = 70 + ((bench.target - value) / bench.target) * 30;
+            else subScore = Math.max(0, 70 - ((value - bench.target) / (bench.target * 2)) * 70);
+        }
+
+        subScore = Math.round(Math.max(0, Math.min(100, subScore)));
+        results.push({ key, bench, value, subScore, statusCls });
+        weightedSum += subScore * bench.weight;
+    }
+
+    const overall = Math.round(Math.max(1, Math.min(100, weightedSum)));
+    let grade;
+    if (overall >= 90) grade = "A+";
+    else if (overall >= 80) grade = "A";
+    else if (overall >= 70) grade = "B+";
+    else if (overall >= 60) grade = "B";
+    else if (overall >= 50) grade = "C+";
+    else if (overall >= 40) grade = "C";
+    else if (overall >= 30) grade = "D";
+    else grade = "F";
+
+    return { score: overall, grade, components: results };
+}
+
+function renderScoreCard(stats) {
+    if (!stats || stats.total_trades === 0) return "";
+
+    const { score, grade, components } = computeOverallScore(stats);
+    const colorClass = score >= 70 ? "score-card--green" : score >= 40 ? "score-card--yellow" : "score-card--red";
+
+    const radius = 34;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (score / 100) * circumference;
+
+    // Sort by sub-score ascending (worst first — things needing improvement on top)
+    const sorted = [...components].sort((a, b) => a.subScore - b.subScore);
+
+    const componentRows = sorted.map(c => {
+        const weightPct = Math.round(c.bench.weight * 100);
+        const formatted = c.bench.format(c.value);
+        // Use the same status classes as stat card benchmarks
+        const barCls = c.statusCls === "above" ? "above" : c.statusCls === "at" ? "at" : "below";
+        const statusLabel = c.statusCls === "above"
+            ? (c.bench.higher ? "Above" : "Within")
+            : c.statusCls === "at" ? "At target"
+            : (c.bench.higher ? "Below" : "Exceeds");
+
+        return `
+            <div class="score-comp" data-card-label="${c.bench.statCardLabel}">
+                <div>
+                    <div class="score-comp__name">${c.bench.displayName}</div>
+                    <div class="score-comp__meta">${formatted} — ${c.bench.label}</div>
+                </div>
+                <div class="score-comp__bar-wrap">
+                    <div class="score-comp__bar-track">
+                        <div class="score-comp__bar-fill score-comp__bar-fill--${barCls}" style="width:${c.subScore}%"></div>
+                    </div>
+                    <span class="score-comp__bar-label">${c.subScore}</span>
+                </div>
+                <span class="bench-status ${barCls}">${statusLabel}</span>
+            </div>`;
+    }).join("");
+
+    return `
+        <div class="score-card ${colorClass}" onclick="toggleScoreBreakdown(this)">
+            <div class="score-card__header">
+                <svg class="score-card__gauge" viewBox="0 0 80 80">
+                    <circle class="score-card__gauge-bg" cx="40" cy="40" r="${radius}"/>
+                    <circle class="score-card__gauge-fill" cx="40" cy="40" r="${radius}"
+                        stroke-dasharray="${circumference}"
+                        stroke-dashoffset="${offset}"/>
+                </svg>
+                <div class="score-card__text">
+                    <div class="score-card__title">Overall Score</div>
+                    <div class="score-card__numbers">
+                        <span class="score-card__score">${score}</span>
+                        <span class="score-card__grade">${grade}</span>
+                    </div>
+                    <div class="score-card__label">Click to see breakdown</div>
+                </div>
+                <svg class="score-card__chevron" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="score-card__breakdown">
+                <div class="score-card__breakdown-inner">
+                    ${componentRows}
+                </div>
+            </div>
+        </div>`;
+}
+
+function toggleScoreBreakdown(el) {
+    el.classList.toggle("expanded");
+}
+
 function renderStats(s) {
     const content = document.getElementById("dashboard-content");
+
+    // Build score card (computed client-side from BENCHMARKS)
+    const scoreCardHtml = renderScoreCard(s);
 
     // Build grouped stat cards
     const performanceCards = [
@@ -329,6 +501,7 @@ function renderStats(s) {
     ].join("");
 
     content.innerHTML = `
+        ${scoreCardHtml}
         <div class="stats-section-header">Performance</div>
         <div class="stats-grid">${performanceCards}</div>
 
@@ -394,23 +567,10 @@ function statCard(label, value, positive = null, negative = false, benchmark = n
     if (positive === true) cls = "positive";
     else if (negative || (positive === false && positive !== null)) cls = "negative";
 
-    // Benchmark indicator
+    // Benchmark indicator (uses shared evalBenchmark function)
     let benchmarkHtml = "";
     if (benchmark !== null && rawValue !== null && !isNaN(rawValue)) {
-        const tol = benchmark.atTolerance ?? 0;
-        const diff = rawValue - benchmark.target;
-        let statusCls, statusText;
-
-        if (Math.abs(diff) <= tol) {
-            statusCls = "at";
-            statusText = "At target";
-        } else if (benchmark.higher ? diff > tol : diff < -tol) {
-            statusCls = "above";
-            statusText = benchmark.higher ? "Above" : "Within";
-        } else {
-            statusCls = "below";
-            statusText = benchmark.higher ? "Below" : "Exceeds";
-        }
+        const { statusCls, statusText } = evalBenchmark(rawValue, benchmark);
 
         benchmarkHtml = `
             <div class="stat-benchmark">

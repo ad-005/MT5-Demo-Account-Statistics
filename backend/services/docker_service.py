@@ -2,6 +2,7 @@ import asyncio
 import logging
 import shutil
 import platform
+from pathlib import Path
 from typing import Optional
 
 from backend.config import (
@@ -355,19 +356,33 @@ async def ensure_port_forwarded(host_port: int) -> bool:
         except ProcessLookupError:
             pass
 
-    # colima ssh --profile mt5 -- -N -L <port>:localhost:<port>
+    # Use direct SSH with Lima's SSH config.  `colima ssh -- -N -L ...`
+    # does NOT work because colima passes args after `--` to the VM's bash
+    # shell, not to the SSH client itself.
+    ssh_config = (
+        Path.home() / ".colima" / "_lima" / f"colima-{COLIMA_PROFILE}" / "ssh.config"
+    )
+    if not ssh_config.exists():
+        logger.error(
+            "Lima SSH config not found at %s — cannot create tunnel.", ssh_config
+        )
+        return False
+
     try:
         proc = await asyncio.create_subprocess_exec(
-            "colima", "ssh", "--profile", COLIMA_PROFILE,
-            "--", "-N",
+            "ssh",
+            "-F", str(ssh_config),
+            "-o", "ExitOnForwardFailure=yes",
+            "-N",
             "-L", f"{host_port}:localhost:{host_port}",
+            f"lima-colima-{COLIMA_PROFILE}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
         _ssh_tunnels[host_port] = proc
 
         # Give the tunnel a moment to establish
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)
 
         if await _verify_port_reachable(host_port):
             logger.info("Manual SSH tunnel for port %d established successfully.", host_port)
