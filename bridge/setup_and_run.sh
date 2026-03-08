@@ -34,7 +34,10 @@ if [ -z "$MT5_PATH" ]; then
     sleep 30
     kill $INSTALLER_PID 2>/dev/null || true
     wait $INSTALLER_PID 2>/dev/null || true
-    wineserver -w 2>/dev/null || true
+    # Kill winemenubuilder — these linger and block wineserver -w indefinitely
+    pkill -f winemenubuilder 2>/dev/null || true
+    # Timeout wineserver -w to avoid hanging if other Wine processes linger
+    timeout 30 wineserver -w 2>/dev/null || true
     sleep 5
     echo "MT5 installation complete."
 fi

@@ -61,9 +61,18 @@ function renderTrades(trades) {
 
     content.innerHTML = `
         <div class="stats-grid" style="margin-bottom:20px">
-            <div class="stat-card"><div class="label">Filtered Trades</div><div class="value">${trades.length}</div></div>
-            <div class="stat-card"><div class="label">Net P&L</div><div class="value ${summary.netPnl >= 0 ? 'positive' : 'negative'}">$${summary.netPnl.toFixed(2)}</div></div>
-            <div class="stat-card"><div class="label">Win Rate</div><div class="value">${summary.winRate.toFixed(1)}%</div></div>
+            <div class="stat-card" data-category="volume">
+                <div class="label-row"><div class="label">Filtered Trades</div></div>
+                <div class="value">${trades.length}</div>
+            </div>
+            <div class="stat-card" data-category="performance">
+                <div class="label-row"><div class="label">Net P&L</div></div>
+                <div class="value ${summary.netPnl >= 0 ? 'positive' : 'negative'}">$${summary.netPnl.toFixed(2)}</div>
+            </div>
+            <div class="stat-card" data-category="performance">
+                <div class="label-row"><div class="label">Win Rate</div></div>
+                <div class="value">${summary.winRate.toFixed(1)}%</div>
+            </div>
         </div>
 
         <div class="section">
