@@ -45,6 +45,7 @@ const api = {
     deleteAccount: (id) => api.del(`/accounts/${id}`),
     startContainer: (id) => api.post(`/accounts/${id}/start`),
     stopContainer: (id) => api.post(`/accounts/${id}/stop`),
+    checkHealth: (id) => api.get(`/accounts/${id}/health`),
 
     // Trades
     getTrades: (accountId, filters = {}) => api.get(`/trades/${accountId}`, filters),

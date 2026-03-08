@@ -115,15 +115,38 @@ async function selectAccount(id) {
 
 async function startContainer(id) {
     const content = document.getElementById("dashboard-content");
-    content.innerHTML = `<div class="loading"><div class="spinner"></div>Starting container... this may take a moment.</div>`;
+    content.innerHTML = `<div class="loading"><div class="spinner"></div>Starting container...</div>`;
 
     try {
         await api.startContainer(id);
-        await loadAccounts();
-        await selectAccount(id);
     } catch (e) {
         content.innerHTML = `<div class="empty-state"><h3>Failed to Start</h3><p>${e.message}</p></div>`;
+        return;
     }
+
+    // Poll for bridge readiness (container takes 3-4 min under QEMU)
+    const maxWait = 360;
+    for (let i = 0; i < maxWait; i += 5) {
+        const elapsed = Math.floor(i / 60);
+        const secs = i % 60;
+        const timeStr = elapsed > 0 ? `${elapsed}m ${secs}s` : `${secs}s`;
+        content.innerHTML = `<div class="loading"><div class="spinner"></div>Container starting... waiting for MT5 terminal (${timeStr})</div>`;
+
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+            const health = await api.checkHealth(id);
+            if (health.ready) {
+                await loadAccounts();
+                await selectAccount(id);
+                return;
+            }
+        } catch (e) {
+            // Bridge not ready yet, keep polling
+        }
+    }
+
+    content.innerHTML = `<div class="empty-state"><h3>Timeout</h3><p>Container started but MT5 bridge didn't become ready. Try refreshing.</p></div>`;
+    await loadAccounts();
 }
 
 async function removeAccount(id) {

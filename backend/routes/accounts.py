@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.models import AccountCreate, AccountOut
-from backend.services import account_service, docker_service
+from backend.services import account_service, docker_service, mt5_bridge_client
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -56,6 +56,17 @@ async def start_account_container(account_id: str):
         raise HTTPException(500, "Failed to start container")
     account_service.assign_port(account_id, port)
     return {"status": "running", "port": port}
+
+
+@router.get("/{account_id}/health")
+async def account_health(account_id: str):
+    acc = account_service.get_account(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    if not acc.container_port:
+        return {"ready": False, "status": "no_port"}
+    healthy = await mt5_bridge_client.check_health(acc.container_port)
+    return {"ready": healthy, "status": "ok" if healthy else "starting"}
 
 
 @router.post("/{account_id}/stop")

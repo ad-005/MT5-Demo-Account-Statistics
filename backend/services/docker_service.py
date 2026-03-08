@@ -335,19 +335,9 @@ async def start_container(account: Account) -> Optional[int]:
         logger.error(f"Container start failed: {stderr}")
         return None
 
-    # Wait for bridge to be ready
-    import httpx
-    for _ in range(MT5_STARTUP_TIMEOUT):
-        await asyncio.sleep(1)
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"http://localhost:{host_port}/health", timeout=2)
-                if resp.status_code == 200:
-                    return host_port
-        except Exception:
-            continue
-
-    logger.warning(f"Container started but bridge not ready after {MT5_STARTUP_TIMEOUT}s")
+    # Return port immediately — the frontend will poll for readiness.
+    # The container takes 3-4 minutes to be fully ready under QEMU,
+    # which exceeds browser HTTP timeouts if we block here.
     return host_port
 
 
