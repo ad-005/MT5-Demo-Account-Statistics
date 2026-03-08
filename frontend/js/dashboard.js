@@ -1,6 +1,110 @@
 let selectedAccountId = null;
 let accounts = [];
 
+// ---------------------------------------------------------------------------
+// Trading performance benchmarks
+// Sources: industry research on professional/prop-firm trading standards.
+// Each entry defines:
+//   target      — the threshold value (number)
+//   higher      — true if "higher is better" (false for drawdown etc.)
+//   label       — short human-readable reference text shown in card
+//   atTolerance — optional +/- range treated as "at target" (default 0)
+// ---------------------------------------------------------------------------
+const BENCHMARKS = {
+    win_rate: {
+        target: 50,
+        higher: true,
+        label: "target >= 50%",
+        atTolerance: 2,
+    },
+    profit_factor: {
+        target: 1.5,
+        higher: true,
+        label: "target >= 1.5",
+        atTolerance: 0.1,
+    },
+    sharpe_ratio: {
+        target: 1.0,
+        higher: true,
+        label: "target >= 1.0",
+        atTolerance: 0.1,
+    },
+    sortino_ratio: {
+        target: 1.0,
+        higher: true,
+        label: "target >= 1.0",
+        atTolerance: 0.1,
+    },
+    max_drawdown_pct: {
+        target: 10,
+        higher: false,
+        label: "target <= 10%",
+        atTolerance: 1,
+    },
+    risk_reward_ratio: {
+        target: 2.0,
+        higher: true,
+        label: "target >= 2.0",
+        atTolerance: 0.2,
+    },
+    expectancy: {
+        target: 0,
+        higher: true,
+        label: "target > 0",
+        atTolerance: 0,
+    },
+};
+
+// ---------------------------------------------------------------------------
+// Stat card category mapping — determines top-border color accent.
+//   performance = green, risk = red, ratio = blue, volume = yellow, streak = gray
+// ---------------------------------------------------------------------------
+const STAT_CATEGORIES = {
+    "Total Trades":    "volume",
+    "Win Rate":        "performance",
+    "Net Profit":      "performance",
+    "Profit Factor":   "performance",
+    "Sharpe Ratio":    "ratio",
+    "Sortino Ratio":   "ratio",
+    "Max Drawdown":    "risk",
+    "Max DD %":        "risk",
+    "Buy %":           "volume",
+    "Sell %":          "volume",
+    "Avg Win":         "performance",
+    "Avg Loss":        "risk",
+    "Largest Win":     "performance",
+    "Largest Loss":    "risk",
+    "Expectancy":      "ratio",
+    "R:R Ratio":       "ratio",
+    "Consec. Wins":    "streak",
+    "Consec. Losses":  "streak",
+};
+
+// ---------------------------------------------------------------------------
+// Plain-language tooltip descriptions for each stat card.
+// Written to be understandable by someone with no trading background.
+// ---------------------------------------------------------------------------
+const STAT_TOOLTIPS = {
+    "Total Trades":    "The total number of buy or sell trades placed during the selected period.",
+    "Win Rate":        "Out of all trades placed, this is the percentage that closed with a profit. A 60% win rate means 6 out of every 10 trades made money.",
+    "Net Profit":      "The total money made minus the total money lost across all trades. Positive means you're ahead; negative means you're behind.",
+    "Profit Factor":   "Divide total winnings by total losses. A value of 2.0 means for every $1 lost, $2 was won. Anything above 1.0 is profitable; above 1.5 is considered solid.",
+    "Sharpe Ratio":    "A measure of how well the account is performing compared to the risk taken. A higher number means better returns relative to the ups and downs in the account balance. Above 1.0 is decent; above 2.0 is excellent.",
+    "Sortino Ratio":   "Similar to the Sharpe Ratio, but only counts the bad (downward) swings as risk. Higher is better. Above 1.0 is decent.",
+    "Max Drawdown":    "The largest drop in account value from a peak to the lowest point that followed it, shown in dollars.",
+    "Max DD %":        "The same as Max Drawdown, but shown as a percentage of the account's peak value. Lower is better. Most prop firms cap this at 10%.",
+    "Buy %":           "The share of trades that were 'buy' (betting the price would go up), out of all trades placed.",
+    "Sell %":          "The share of trades that were 'sell' (betting the price would go down), out of all trades placed.",
+    "Avg Win":         "The average dollar amount gained on trades that were profitable. A higher number here is better.",
+    "Avg Loss":        "The average dollar amount lost on trades that were unprofitable. A lower (smaller) number here is better.",
+    "Largest Win":     "The single biggest profit made on any one trade in this period.",
+    "Largest Loss":    "The single biggest loss suffered on any one trade in this period.",
+    "Expectancy":      "On average, how much money do you expect to make (or lose) per trade? A positive number means the strategy is expected to profit over time.",
+    "R:R Ratio":       "Risk-to-Reward ratio. Compares the average win size to the average loss size. A ratio of 2.0 means wins are twice as large as losses on average. Higher is better.",
+    "Consec. Wins":    "The longest streak of winning trades in a row during this period.",
+    "Consec. Losses":  "The longest streak of losing trades in a row during this period.",
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     checkDocker();
     loadAccounts();
@@ -64,7 +168,7 @@ async function loadAccounts() {
 function renderAccounts() {
     const list = document.getElementById("account-list");
     if (accounts.length === 0) {
-        list.innerHTML = "<p style='color: var(--text-secondary); font-size: 13px; padding: 8px 12px;'>No accounts added yet.</p>";
+        list.innerHTML = "<p style='color: var(--text-muted); font-size: 13px; padding: 8px 12px;'>No accounts added yet.</p>";
         return;
     }
 
@@ -167,27 +271,50 @@ async function removeAccount(id) {
 
 function renderStats(s) {
     const content = document.getElementById("dashboard-content");
+
+    // Build grouped stat cards
+    const performanceCards = [
+        statCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0),
+        statCard("Win Rate", s.win_rate + "%", s.win_rate >= 50, false, BENCHMARKS.win_rate, s.win_rate),
+        statCard("Profit Factor", s.profit_factor, null, false, BENCHMARKS.profit_factor, s.profit_factor),
+        statCard("Avg Win", "$" + s.average_profit.toFixed(2), true),
+        statCard("Largest Win", "$" + s.largest_win.toFixed(2), true),
+        statCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0, false, BENCHMARKS.expectancy, s.expectancy),
+    ].join("");
+
+    const riskCards = [
+        statCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false, true),
+        statCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false, true, BENCHMARKS.max_drawdown_pct, s.max_drawdown_pct),
+        statCard("Avg Loss", "$" + s.average_loss.toFixed(2), false, true),
+        statCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false, true),
+    ].join("");
+
+    const ratioCards = [
+        statCard("Sharpe Ratio", s.sharpe_ratio, s.sharpe_ratio >= 1, false, BENCHMARKS.sharpe_ratio, s.sharpe_ratio),
+        statCard("Sortino Ratio", s.sortino_ratio, s.sortino_ratio >= 1, false, BENCHMARKS.sortino_ratio, s.sortino_ratio),
+        statCard("R:R Ratio", s.risk_reward_ratio, null, false, BENCHMARKS.risk_reward_ratio, s.risk_reward_ratio),
+    ].join("");
+
+    const volumeCards = [
+        statCard("Total Trades", s.total_trades),
+        statCard("Buy %", s.buy_percentage + "%"),
+        statCard("Sell %", s.sell_percentage + "%"),
+        statCard("Consec. Wins", s.consecutive_wins),
+        statCard("Consec. Losses", s.consecutive_losses),
+    ].join("");
+
     content.innerHTML = `
-        <div class="stats-grid">
-            ${statCard("Total Trades", s.total_trades)}
-            ${statCard("Win Rate", s.win_rate + "%", s.win_rate >= 50)}
-            ${statCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0)}
-            ${statCard("Profit Factor", s.profit_factor)}
-            ${statCard("Sharpe Ratio", s.sharpe_ratio, s.sharpe_ratio >= 1)}
-            ${statCard("Sortino Ratio", s.sortino_ratio, s.sortino_ratio >= 1)}
-            ${statCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false, true)}
-            ${statCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false, true)}
-            ${statCard("Buy %", s.buy_percentage + "%")}
-            ${statCard("Sell %", s.sell_percentage + "%")}
-            ${statCard("Avg Win", "$" + s.average_profit.toFixed(2), true)}
-            ${statCard("Avg Loss", "$" + s.average_loss.toFixed(2), false, true)}
-            ${statCard("Largest Win", "$" + s.largest_win.toFixed(2), true)}
-            ${statCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false, true)}
-            ${statCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0)}
-            ${statCard("R:R Ratio", s.risk_reward_ratio)}
-            ${statCard("Consec. Wins", s.consecutive_wins)}
-            ${statCard("Consec. Losses", s.consecutive_losses)}
-        </div>
+        <div class="stats-section-header">Performance</div>
+        <div class="stats-grid">${performanceCards}</div>
+
+        <div class="stats-section-header">Risk</div>
+        <div class="stats-grid">${riskCards}</div>
+
+        <div class="stats-section-header">Ratios</div>
+        <div class="stats-grid">${ratioCards}</div>
+
+        <div class="stats-section-header">Volume &amp; Streaks</div>
+        <div class="stats-grid">${volumeCards}</div>
 
         <div class="section">
             <h2>Session Win Rates</h2>
@@ -222,32 +349,84 @@ function renderStats(s) {
         </div>
         ` : ""}
 
-        <div style="text-align:center;margin-top:16px">
-            <button class="btn btn-primary" onclick="stopContainerUI('${selectedAccountId}')">Stop Container</button>
+        <div style="text-align:center;margin-top:20px;padding-bottom:16px">
+            <button class="btn btn-danger" style="padding:8px 24px" onclick="stopContainerUI('${selectedAccountId}')">Stop Container</button>
         </div>
     `;
 }
 
-function statCard(label, value, positive = null, negative = false) {
+/**
+ * Render a stat card.
+ * @param {string} label
+ * @param {string|number} value      — display string
+ * @param {boolean|null} positive    — true=green, false=red, null=neutral
+ * @param {boolean} negative         — force red when true
+ * @param {object|null} benchmark    — entry from BENCHMARKS (or null)
+ * @param {number|null} rawValue     — numeric value for benchmark comparison
+ */
+function statCard(label, value, positive = null, negative = false, benchmark = null, rawValue = null) {
     let cls = "";
     if (positive === true) cls = "positive";
-    else if (negative || positive === false && positive !== null) cls = "negative";
+    else if (negative || (positive === false && positive !== null)) cls = "negative";
+
+    // Benchmark indicator
+    let benchmarkHtml = "";
+    if (benchmark !== null && rawValue !== null && !isNaN(rawValue)) {
+        const tol = benchmark.atTolerance ?? 0;
+        const diff = rawValue - benchmark.target;
+        let statusCls, statusText;
+
+        if (Math.abs(diff) <= tol) {
+            statusCls = "at";
+            statusText = "At target";
+        } else if (benchmark.higher ? diff > tol : diff < -tol) {
+            statusCls = "above";
+            statusText = benchmark.higher ? "Above" : "Within";
+        } else {
+            statusCls = "below";
+            statusText = benchmark.higher ? "Below" : "Exceeds";
+        }
+
+        benchmarkHtml = `
+            <div class="stat-benchmark">
+                <span class="bench-ref">${benchmark.label}</span>
+                <span class="bench-status ${statusCls}">${statusText}</span>
+            </div>`;
+    }
+
+    // Tooltip markup
+    const tooltipText = STAT_TOOLTIPS[label] ?? null;
+    const tooltipAttr = tooltipText ? ' data-tooltip="1"' : "";
+    const tooltipHtml = tooltipText
+        ? `<span class="stat-tooltip" role="tooltip">${tooltipText}</span>`
+        : "";
+    const infoIcon = tooltipText
+        ? `<span class="stat-info-icon" aria-hidden="true">i</span>`
+        : "";
+
+    // Category for color accent
+    const category = STAT_CATEGORIES[label] || "";
+    const categoryAttr = category ? ` data-category="${category}"` : "";
+
     return `
-        <div class="stat-card">
-            <div class="label">${label}</div>
-            <div class="value ${cls}">${value}</div>
+        <div class="stat-card"${tooltipAttr}${categoryAttr} tabindex="0">
+            <div class="label-row">
+                <div class="label">${label}</div>${infoIcon}
+            </div>
+            <div class="value ${cls}">${value}</div>${benchmarkHtml}${tooltipHtml}
         </div>
     `;
 }
 
 function renderBarChart(data) {
-    if (!data || Object.keys(data).length === 0) return "<p style='color:var(--text-secondary)'>No data</p>";
+    if (!data || Object.keys(data).length === 0) return "<p style='color:var(--text-muted)'>No data</p>";
     return Object.entries(data).map(([label, pct]) => `
         <div class="bar-row">
             <span class="bar-label">${label}</span>
             <div class="bar-track">
-                <div class="bar-fill ${pct >= 50 ? 'green' : 'blue'}" style="width:${Math.max(pct, 2)}%">${pct}%</div>
+                <div class="bar-fill ${pct >= 50 ? 'green' : 'blue'}" style="width:${Math.max(pct, 4)}%"></div>
             </div>
+            <span class="bar-value">${pct}%</span>
         </div>
     `).join("");
 }

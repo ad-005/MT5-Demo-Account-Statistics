@@ -5,18 +5,33 @@
 }
 
 :root {
-    --bg-primary: #0f1117;
-    --bg-secondary: #1a1d27;
-    --bg-card: #222533;
-    --text-primary: #e1e4ea;
-    --text-secondary: #8b8fa3;
+    --bg-primary: #0b0e14;
+    --bg-secondary: #141821;
+    --bg-card: #1a1f2e;
+    --bg-card-hover: #1f2538;
+    --bg-surface: #0f1219;
+    --text-primary: #e4e7ed;
+    --text-secondary: #6b7280;
+    --text-muted: #4b5263;
     --accent: #4f8ff7;
     --accent-hover: #3a7ae0;
-    --green: #2ecc71;
-    --red: #e74c3c;
-    --yellow: #f39c12;
-    --border: #2d3143;
-    --radius: 8px;
+    --accent-glow: rgba(79, 143, 247, 0.08);
+    --green: #10b981;
+    --green-dim: rgba(16, 185, 129, 0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239, 68, 68, 0.12);
+    --yellow: #f59e0b;
+    --yellow-dim: rgba(245, 158, 11, 0.12);
+    --border: #1e2433;
+    --border-light: #252d3f;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --transition-fast: 150ms ease;
+    --transition-normal: 200ms ease;
+    --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
@@ -24,9 +39,21 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Layout */
+/* Mono font for dashboard numbers */
+.stat-card .value,
+.bar-value,
+.bench-ref {
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ========================================================================
+   Layout
+   ======================================================================== */
+
 .app {
     display: flex;
     min-height: 100vh;
@@ -36,7 +63,7 @@ body {
     width: 260px;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border);
-    padding: 20px;
+    padding: 24px 16px;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -45,45 +72,72 @@ body {
 }
 
 .sidebar h1 {
-    font-size: 18px;
-    margin-bottom: 24px;
-    color: var(--accent);
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 28px;
+    padding: 0 8px;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sidebar h1::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+    flex-shrink: 0;
 }
 
 .sidebar nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin-bottom: 24px;
+    gap: 2px;
+    margin-bottom: 28px;
 }
 
 .sidebar nav a {
     color: var(--text-secondary);
     text-decoration: none;
-    padding: 8px 12px;
+    padding: 9px 12px;
     border-radius: var(--radius);
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
+    font-size: 14px;
+    font-weight: 500;
 }
 
-.sidebar nav a:hover,
-.sidebar nav a.active {
+.sidebar nav a:hover {
     background: var(--bg-card);
     color: var(--text-primary);
+}
+
+.sidebar nav a.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+    font-weight: 600;
 }
 
 .main {
     flex: 1;
     margin-left: 260px;
-    padding: 24px;
+    padding: 28px 32px;
+    max-width: 1400px;
 }
 
-/* Docker Banner */
+/* ========================================================================
+   Docker Banner
+   ======================================================================== */
+
 .docker-banner {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px 20px;
-    margin-bottom: 20px;
+    padding: 14px 20px;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -91,28 +145,35 @@ body {
 
 .docker-banner.warning {
     border-color: var(--yellow);
+    background: var(--yellow-dim);
 }
 
 .docker-banner.error {
     border-color: var(--red);
+    background: var(--red-dim);
 }
 
 .docker-banner .message {
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
 }
 
-/* Account List */
+/* ========================================================================
+   Account List
+   ======================================================================== */
+
 .account-list {
     margin-bottom: 24px;
 }
 
 .account-list h3 {
-    font-size: 13px;
+    font-size: 11px;
     text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    letter-spacing: 0.8px;
+    padding: 0 8px;
+    font-weight: 600;
 }
 
 .account-item {
@@ -122,8 +183,9 @@ body {
     padding: 10px 12px;
     border-radius: var(--radius);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
     margin-bottom: 2px;
+    border: 1px solid transparent;
 }
 
 .account-item:hover {
@@ -131,8 +193,8 @@ body {
 }
 
 .account-item.selected {
-    background: var(--bg-card);
-    border: 1px solid var(--accent);
+    background: var(--accent-glow);
+    border-color: rgba(79, 143, 247, 0.2);
 }
 
 .account-item .info {
@@ -141,24 +203,28 @@ body {
 }
 
 .account-item .info .name {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .account-item .info .login {
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
 }
 
 .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: var(--text-secondary);
+    background: var(--text-muted);
+    flex-shrink: 0;
 }
 
 .status-dot.running {
     background: var(--green);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
 }
 
 .status-dot.stopped {
@@ -170,45 +236,159 @@ body {
     padding: 10px;
     margin-top: 8px;
     background: transparent;
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--border-light);
     border-radius: var(--radius);
-    color: var(--text-secondary);
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s;
+    font-size: 13px;
+    transition: all var(--transition-normal);
 }
 
 .btn-add-account:hover {
     border-color: var(--accent);
     color: var(--accent);
+    background: var(--accent-glow);
 }
 
-/* Cards Grid */
+/* ========================================================================
+   Stats Section Headers
+   ======================================================================== */
+
+.stats-section-header {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 14px;
+    margin-top: 28px;
+    padding-left: 2px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.stats-section-header:first-child {
+    margin-top: 0;
+}
+
+/* ========================================================================
+   Stats Grid
+   ======================================================================== */
+
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
     margin-bottom: 24px;
 }
+
+/* ========================================================================
+   Stat Cards — Redesigned
+   ======================================================================== */
 
 .stat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
+    padding: 20px 22px;
+    position: relative;
+    transition: border-color var(--transition-smooth), box-shadow var(--transition-smooth), background var(--transition-smooth), transform var(--transition-smooth);
+    cursor: default;
+    overflow: visible;
+}
+
+.stat-card:hover {
+    border-color: var(--border-light);
+    background: var(--bg-card-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+/* Category accent — colored left border + subtle glow on hover */
+.stat-card[data-category="performance"] {
+    border-left: 3px solid var(--green);
+}
+.stat-card[data-category="performance"]:hover {
+    box-shadow: var(--shadow-md), -4px 0 12px rgba(16, 185, 129, 0.1);
+}
+
+.stat-card[data-category="risk"] {
+    border-left: 3px solid var(--red);
+}
+.stat-card[data-category="risk"]:hover {
+    box-shadow: var(--shadow-md), -4px 0 12px rgba(239, 68, 68, 0.1);
+}
+
+.stat-card[data-category="ratio"] {
+    border-left: 3px solid var(--accent);
+}
+.stat-card[data-category="ratio"]:hover {
+    box-shadow: var(--shadow-md), -4px 0 12px rgba(79, 143, 247, 0.1);
+}
+
+.stat-card[data-category="volume"] {
+    border-left: 3px solid var(--yellow);
+}
+.stat-card[data-category="volume"]:hover {
+    box-shadow: var(--shadow-md), -4px 0 12px rgba(245, 158, 11, 0.1);
+}
+
+.stat-card[data-category="streak"] {
+    border-left: 3px solid var(--text-muted);
+}
+
+/* Label row with info icon */
+.stat-card .label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
 }
 
 .stat-card .label {
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
     color: var(--text-secondary);
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
+    letter-spacing: 0.6px;
+    font-weight: 500;
 }
 
+/* Info icon — hidden by default, visible on card hover */
+.stat-info-icon {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-muted);
+    color: var(--text-muted);
+    font-size: 9px;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: help;
+    font-style: italic;
+    font-weight: 700;
+}
+
+.stat-card:hover .stat-info-icon {
+    display: flex;
+}
+
+.stat-info-icon:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Value — the hero element of each card */
 .stat-card .value {
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
 }
 
 .stat-card .value.positive {
@@ -219,90 +399,222 @@ body {
     color: var(--red);
 }
 
-/* Section */
+/* Benchmark indicator — compact pill style */
+.stat-benchmark {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-benchmark .bench-ref {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-benchmark .bench-status {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 99px;
+}
+
+.stat-benchmark .bench-status.above {
+    color: var(--green);
+    background: var(--green-dim);
+}
+
+.stat-benchmark .bench-status.below {
+    color: var(--red);
+    background: var(--red-dim);
+}
+
+.stat-benchmark .bench-status.at {
+    color: var(--yellow);
+    background: var(--yellow-dim);
+}
+
+/* ========================================================================
+   Tooltips — appear below the info icon on hover
+   ======================================================================== */
+
+.stat-tooltip {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 240px;
+    padding: 12px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
+    z-index: 1000;
+    display: none;
+    font-weight: 400;
+    font-style: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Upward-pointing arrow */
+.stat-tooltip::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-bottom-color: var(--border-light);
+}
+
+.stat-tooltip::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-bottom-color: var(--bg-surface);
+}
+
+/* Show tooltip on card hover and keyboard focus */
+.stat-card[data-tooltip]:hover .stat-tooltip,
+.stat-card[data-tooltip]:focus-within .stat-tooltip {
+    display: block;
+}
+
+/* ========================================================================
+   Sections
+   ======================================================================== */
+
 .section {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
+    border-radius: var(--radius-lg);
+    padding: 24px;
     margin-bottom: 20px;
 }
 
 .section h2 {
-    font-size: 16px;
-    margin-bottom: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 18px;
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
 }
 
-/* Tables */
+/* ========================================================================
+   Tables
+   ======================================================================== */
+
 table {
     width: 100%;
     border-collapse: collapse;
 }
 
 th, td {
-    padding: 10px 12px;
+    padding: 10px 14px;
     text-align: left;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
 }
 
 th {
-    color: var(--text-secondary);
-    font-weight: 500;
+    color: var(--text-muted);
+    font-weight: 600;
     text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.5px;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    padding-top: 0;
+}
+
+tr:last-child td {
+    border-bottom: none;
 }
 
 td.positive {
     color: var(--green);
+    font-weight: 500;
 }
 
 td.negative {
     color: var(--red);
+    font-weight: 500;
 }
 
-/* Buttons */
+/* ========================================================================
+   Buttons
+   ======================================================================== */
+
 .btn {
-    padding: 8px 16px;
-    border: none;
+    padding: 8px 18px;
+    border: 1px solid var(--border);
     border-radius: var(--radius);
     cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all var(--transition-normal);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+}
+
+.btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--border-light);
 }
 
 .btn-primary {
     background: var(--accent);
     color: white;
+    border-color: var(--accent);
 }
 
 .btn-primary:hover {
     background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    box-shadow: 0 2px 8px rgba(79, 143, 247, 0.25);
 }
 
 .btn-danger {
     background: transparent;
     color: var(--red);
-    border: 1px solid var(--red);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 3px 8px;
+    font-size: 11px;
 }
 
 .btn-danger:hover {
     background: var(--red);
     color: white;
+    border-color: var(--red);
 }
 
 .btn-sm {
-    padding: 4px 10px;
+    padding: 5px 12px;
     font-size: 12px;
 }
 
 .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
 }
 
-/* Modal */
+/* ========================================================================
+   Modal
+   ======================================================================== */
+
 .modal-overlay {
     display: none;
     position: fixed;
@@ -310,7 +622,8 @@ td.negative {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
     z-index: 100;
     justify-content: center;
     align-items: center;
@@ -323,14 +636,18 @@ td.negative {
 .modal {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-    width: 400px;
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    width: 420px;
     max-width: 90vw;
+    box-shadow: var(--shadow-lg);
 }
 
 .modal h2 {
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
 }
 
 .form-group {
@@ -339,9 +656,12 @@ td.negative {
 
 .form-group label {
     display: block;
-    font-size: 13px;
-    color: var(--text-secondary);
+    font-size: 12px;
+    color: var(--text-muted);
     margin-bottom: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .form-group input,
@@ -353,22 +673,27 @@ td.negative {
     border-radius: var(--radius);
     color: var(--text-primary);
     font-size: 14px;
+    transition: border-color var(--transition-fast);
 }
 
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
     border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(79, 143, 247, 0.1);
 }
 
 .modal-actions {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    margin-top: 20px;
+    margin-top: 24px;
 }
 
-/* Filters Bar */
+/* ========================================================================
+   Filters Bar
+   ======================================================================== */
+
 .filters-bar {
     display: flex;
     gap: 12px;
@@ -381,40 +706,48 @@ td.negative {
     margin-bottom: 0;
 }
 
-/* Loading */
+/* ========================================================================
+   Loading & Spinner
+   ======================================================================== */
+
 .loading {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 40px;
+    padding: 48px;
     color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .spinner {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     border: 2px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     margin-right: 12px;
+    flex-shrink: 0;
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
-/* Bar chart (CSS-only) */
+/* ========================================================================
+   Bar Charts
+   ======================================================================== */
+
 .bar-chart {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .bar-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
 }
 
 .bar-label {
@@ -423,49 +756,74 @@ td.negative {
     color: var(--text-secondary);
     text-align: right;
     flex-shrink: 0;
+    font-weight: 500;
 }
 
 .bar-track {
     flex: 1;
-    height: 24px;
-    background: var(--bg-primary);
-    border-radius: 4px;
+    height: 28px;
+    background: var(--bg-surface);
+    border-radius: 6px;
     overflow: hidden;
 }
 
 .bar-fill {
     height: 100%;
-    border-radius: 4px;
-    transition: width 0.5s ease;
+    border-radius: 6px;
+    transition: width 0.6s var(--transition-smooth);
     display: flex;
     align-items: center;
-    padding-left: 8px;
+    padding-left: 10px;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     color: white;
+    min-width: fit-content;
 }
 
 .bar-fill.green {
-    background: var(--green);
+    background: linear-gradient(135deg, var(--green), #059669);
 }
 
 .bar-fill.blue {
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--accent), #3b82f6);
 }
 
-/* Empty state */
+.bar-value {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 42px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ========================================================================
+   Empty State
+   ======================================================================== */
+
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
+    padding: 72px 24px;
     color: var(--text-secondary);
 }
 
 .empty-state h3 {
     margin-bottom: 8px;
     color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
 }
 
-/* Responsive */
+.empty-state p {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+/* ========================================================================
+   Responsive
+   ======================================================================== */
+
 @media (max-width: 768px) {
     .sidebar {
         width: 100%;
@@ -474,11 +832,22 @@ td.negative {
     }
     .main {
         margin-left: 0;
+        padding: 20px 16px;
     }
     .app {
         flex-direction: column;
     }
     .stats-grid {
         grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .stat-card .value {
+        font-size: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
     }
 }
