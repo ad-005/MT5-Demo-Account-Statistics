@@ -1,18 +1,20 @@
-FROM scottyhardy/docker-wine:stable-9.0
+FROM scottyhardy/docker-wine:stable-10.0-20250525
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Base image provides Wine stable + Xvfb. Install additional tools.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3 python3-pip \
+        python3 python3-pip python3-venv \
         wget \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Linux-side Python packages (bridge server)
+# Install Linux-side Python packages in a venv (PEP 668 compliance)
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt /app/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Download MT5 installer
 RUN mkdir -p /mt5 && \

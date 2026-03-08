@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import FastAPI, Query
 import uvicorn
@@ -31,7 +31,7 @@ TRADES_FILE = "trades.json"
 STARTUP_TIMEOUT = int(os.environ.get("STARTUP_TIMEOUT", "300"))
 
 
-def _read_json(filename: str) -> Optional[dict | list]:
+def _read_json(filename: str) -> Optional[Union[dict, list]]:
     """Read and parse a JSON file from the MT5 Files directory."""
     filepath = MT5_FILES_DIR / filename
     try:
