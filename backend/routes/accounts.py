@@ -65,6 +65,8 @@ async def account_health(account_id: str):
         raise HTTPException(404, "Account not found")
     if not acc.container_port:
         return {"ready": False, "status": "no_port"}
+    # Ensure Colima port forwarding hasn't dropped (ARM Mac QEMU workaround)
+    await docker_service.ensure_port_forwarded(acc.container_port)
     healthy = await mt5_bridge_client.check_health(acc.container_port)
     return {"ready": healthy, "status": "ok" if healthy else "starting"}
 

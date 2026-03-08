@@ -21,9 +21,17 @@ _machine = platform.machine()  # arm64 / x86_64 / AMD64
 
 COLIMA_PROFILE = "mt5"
 
+# Track active SSH tunnel processes so we can clean them up on shutdown.
+_ssh_tunnels: dict[int, asyncio.subprocess.Process] = {}
+
 
 def _is_arm() -> bool:
     return _machine in ("arm64", "aarch64", "ARM64")
+
+
+def _uses_colima_x86() -> bool:
+    """True if we're on an ARM Mac using the Colima x86_64 profile."""
+    return _system == "Darwin" and _is_arm() and bool(shutil.which("colima"))
 
 
 def _get_next_port() -> int:
@@ -62,7 +70,7 @@ async def _run(*args: str, timeout: int = 120, env: dict = None) -> tuple[int, s
 async def _docker_run(*args: str, timeout: int = 120) -> tuple[int, str, str]:
     """Run a docker command, targeting the x86_64 Colima VM on ARM Macs."""
     env = {}
-    if _system == "Darwin" and _is_arm() and shutil.which("colima"):
+    if _uses_colima_x86():
         socket = _colima_socket()
         env["DOCKER_HOST"] = f"unix://{socket}"
     return await _run(*args, timeout=timeout, env=env if env else None)
@@ -301,6 +309,88 @@ async def build_image() -> bool:
     return True
 
 
+# --------------- Port forwarding (Colima x86_64 QEMU) ---------------
+
+async def _verify_port_reachable(port: int, timeout: float = 2.0) -> bool:
+    """Check if a port on localhost is accepting TCP connections."""
+    try:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", port),
+            timeout=timeout,
+        )
+        writer.close()
+        await writer.wait_closed()
+        return True
+    except (OSError, asyncio.TimeoutError):
+        return False
+
+
+async def ensure_port_forwarded(host_port: int) -> bool:
+    """Ensure a container port is reachable from the host.
+
+    On ARM Macs with Colima QEMU, port forwarding is done via SSH tunnels
+    managed by Lima's hostagent.  Under heavy CPU load (QEMU x86 emulation),
+    these tunnels can drop.  If the port is not reachable, we establish a
+    manual SSH tunnel as a fallback.
+
+    Returns True if the port is (or was made) reachable, False otherwise.
+    """
+    if not _uses_colima_x86():
+        return True  # non-Colima platforms don't need this
+
+    if await _verify_port_reachable(host_port):
+        return True
+
+    logger.warning(
+        "Port %d not reachable on host — Colima SSH forwarding may have "
+        "dropped. Establishing manual SSH tunnel as fallback.",
+        host_port,
+    )
+
+    # Kill any stale tunnel for this port
+    if host_port in _ssh_tunnels:
+        old = _ssh_tunnels.pop(host_port)
+        try:
+            old.kill()
+        except ProcessLookupError:
+            pass
+
+    # colima ssh --profile mt5 -- -N -L <port>:localhost:<port>
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "colima", "ssh", "--profile", COLIMA_PROFILE,
+            "--", "-N",
+            "-L", f"{host_port}:localhost:{host_port}",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _ssh_tunnels[host_port] = proc
+
+        # Give the tunnel a moment to establish
+        await asyncio.sleep(1.0)
+
+        if await _verify_port_reachable(host_port):
+            logger.info("Manual SSH tunnel for port %d established successfully.", host_port)
+            return True
+
+        logger.error("Manual SSH tunnel for port %d did not help — port still unreachable.", host_port)
+        return False
+    except Exception as exc:
+        logger.error("Failed to create SSH tunnel for port %d: %s", host_port, exc)
+        return False
+
+
+async def _cleanup_ssh_tunnels():
+    """Kill all manual SSH tunnels.  Called on shutdown."""
+    for port, proc in _ssh_tunnels.items():
+        try:
+            proc.kill()
+            logger.debug("Killed SSH tunnel for port %d", port)
+        except ProcessLookupError:
+            pass
+    _ssh_tunnels.clear()
+
+
 # --------------- Containers ---------------
 
 def _container_name(account: Account) -> str:
@@ -315,6 +405,8 @@ async def start_container(account: Account) -> Optional[int]:
     if stdout.strip():
         port = await _get_container_port(name)
         if port:
+            # Verify port forwarding is still working (Colima tunnel may have dropped)
+            await ensure_port_forwarded(port)
             return port
 
     # Remove stopped container with same name
@@ -338,6 +430,8 @@ async def start_container(account: Account) -> Optional[int]:
     # Return port immediately — the frontend will poll for readiness.
     # The container takes 3-4 minutes to be fully ready under QEMU,
     # which exceeds browser HTTP timeouts if we block here.
+    # Note: we don't call _ensure_port_forwarded here because the container
+    # hasn't started listening yet — the health poll loop will trigger it.
     return host_port
 
 
@@ -369,6 +463,8 @@ async def stop_all_containers():
         if cid:
             await _docker_run("docker", "stop", cid)
             await _docker_run("docker", "rm", cid)
+    # Clean up any manual SSH tunnels we created
+    await _cleanup_ssh_tunnels()
 
 
 async def _get_container_port(name: str) -> Optional[int]:
