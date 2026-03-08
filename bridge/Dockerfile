@@ -1,24 +1,13 @@
-FROM ubuntu:22.04
+FROM scottyhardy/docker-wine:stable-9.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base tools and add WineHQ staging repo
+# Base image provides Wine stable + Xvfb. Install additional tools.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        software-properties-common \
-        gpg-agent \
-        wget \
-        cabextract \
-        xvfb \
         python3 python3-pip \
-        unzip \
+        wget \
         ca-certificates \
-    && dpkg --add-architecture i386 \
-    && mkdir -pm755 /etc/apt/keyrings \
-    && wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key \
-    && wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources \
-    && apt-get update \
-    && apt-get install -y --install-recommends winehq-staging \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Linux-side Python packages (bridge server)
@@ -30,17 +19,9 @@ RUN mkdir -p /mt5 && \
     wget -O /mt5/mt5setup.exe \
         "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
 
-# Download and set up Windows Python (embedded zip)
-RUN mkdir -p /opt/winpython && \
-    wget -O /tmp/python.zip \
-        "https://www.python.org/ftp/python/3.12.3/python-3.12.3-embed-amd64.zip" && \
-    unzip /tmp/python.zip -d /opt/winpython && \
-    rm /tmp/python.zip && \
-    wget -O /opt/winpython/get-pip.py https://bootstrap.pypa.io/get-pip.py
-
 # Copy app files
 COPY bridge_server.py /app/bridge_server.py
-COPY mt5_worker.py /app/mt5_worker.py
+COPY mql5/ /app/mql5/
 COPY setup_and_run.sh /app/setup_and_run.sh
 RUN chmod +x /app/setup_and_run.sh
 
@@ -50,4 +31,12 @@ ENV WINEDLLOVERRIDES="mscoree,mshtml="
 ENV WINEPREFIX=/root/.wine
 ENV DISPLAY=:0
 
+# Base image entrypoint env vars
+ENV RUN_AS_ROOT=yes
+ENV USE_XVFB=yes
+ENV XVFB_SERVER=:0
+ENV XVFB_SCREEN=0
+ENV XVFB_RESOLUTION=1024x768x24
+
+# Base image ENTRYPOINT (/usr/bin/entrypoint) handles Xvfb, then execs CMD
 CMD ["/app/setup_and_run.sh"]
