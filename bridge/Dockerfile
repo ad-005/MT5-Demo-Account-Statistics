@@ -69,17 +69,20 @@ RUN set -e && \
     mkdir -p "$EXPERTS_DIR" && \
     cp /app/mql5/DataExporter.mq5 "$EXPERTS_DIR/" && \
     METAEDITOR="$MT5_DIR/MetaEditor64.exe" && \
-    rm -f /tmp/.X98-lock && \
-    Xvfb :98 -screen 0 1024x768x24 & XVFB_PID=$! && sleep 1 && \
-    export DISPLAY=:98 && \
+    rm -f /tmp/.X99-lock && \
+    Xvfb :99 -screen 0 1024x768x24 & XVFB_PID=$! && sleep 2 && \
+    wineboot -u 2>/dev/null && \
+    timeout 30 wineserver -w 2>/dev/null || true && \
+    echo "=== Compiling EA with MetaEditor ===" && \
     cd "$MT5_DIR" && \
-    (wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true) && \
-    (wineserver -w 2>/dev/null || true) && \
-    (kill $XVFB_PID 2>/dev/null || true) && \
+    timeout 120 wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true && \
+    timeout 30 wineserver -w 2>/dev/null || true && \
+    kill $XVFB_PID 2>/dev/null || true && \
     if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then \
         echo "EA pre-compiled successfully."; \
     else \
         echo "WARNING: EA pre-compilation failed, will compile at runtime."; \
+        ls -la "$MT5_DIR/MQL5/Logs/" 2>/dev/null || true; \
     fi
 
 # Copy remaining app files
