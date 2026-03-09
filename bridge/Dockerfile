@@ -87,33 +87,37 @@ RUN set -e && \
 
 # Pre-bake chart profile, common.ini, and inject EA into existing profiles.
 # Saves ~5s on every container startup. Pure filesystem writes — no Wine needed.
+# Uses heredoc (<<) for multiline Python since Dockerfile RUN doesn't support
+# multiline strings in python3 -c "..." (Docker parses newlines as instructions).
 RUN set -e && \
     MT5_DIR=$(dirname "$(find /root/.wine -name 'terminal64.exe' 2>/dev/null | head -1)") && \
     echo "Pre-baking configs into: $MT5_DIR" && \
-    \
-    # 1. Chart profile with EA attached (UTF-16LE with BOM, CRLF line endings)
     PROFILES_DIR="$MT5_DIR/Profiles/Charts/Default" && \
     mkdir -p "$PROFILES_DIR" && \
-    python3 -c "
-import codecs
+    mkdir -p "$MT5_DIR/Config" && \
+    python3 - "$PROFILES_DIR" "$MT5_DIR" <<'PREBAKE_EOF'
+import codecs, os, sys, glob
+
+profiles_dir = sys.argv[1]
+mt5_dir = sys.argv[2]
+
+# 1. Chart profile with EA attached (UTF-16LE with BOM, CRLF)
 chart = '<chart>\r\nid=1\r\nsymbol=EURUSD\r\nperiod_type=1\r\nperiod_size=1\r\ndigits=5\r\n<expert>\r\nname=DataExporter\r\nflags=339\r\nwindow_num=0\r\n<inputs>\r\n</inputs>\r\n</expert>\r\n<window>\r\nheight=100\r\n<indicator>\r\nname=Main\r\npath=\r\napply=1\r\nshow_data=1\r\n</indicator>\r\n</window>\r\n</chart>\r\n'
-with open('$PROFILES_DIR/chart01.chr', 'wb') as f:
+chart_path = os.path.join(profiles_dir, 'chart01.chr')
+with open(chart_path, 'wb') as f:
     f.write(codecs.BOM_UTF16_LE)
     f.write(chart.encode('utf-16-le'))
 print('Chart profile pre-baked.')
-" && \
-    \
-    # 2. Inject EA into any chart profiles created during MT5 install
-    python3 -c "
-import codecs, os, glob
+
+# 2. Inject EA into any chart profiles created during MT5 install
 expert_section = '<expert>\r\nname=DataExporter\r\nflags=339\r\nwindow_num=0\r\n<inputs>\r\n</inputs>\r\n</expert>'
-for chr_path in glob.glob('$MT5_DIR/Profiles/Charts/*/chart*.chr'):
+for chr_path in glob.glob(os.path.join(mt5_dir, 'Profiles/Charts/*/chart*.chr')):
     try:
         with open(chr_path, 'rb') as f:
             raw = f.read()
         try:
             content = raw.decode('utf-16-le').lstrip('\ufeff')
-        except:
+        except Exception:
             content = raw.decode('utf-8', errors='replace')
         if '<expert>' in content:
             continue
@@ -126,18 +130,14 @@ for chr_path in glob.glob('$MT5_DIR/Profiles/Charts/*/chart*.chr'):
     except Exception as e:
         print(f'  Warning: {chr_path}: {e}')
 print('EA injection complete.')
-" && \
-    \
-    # 3. common.ini — create fresh with AutoTrading enabled
-    mkdir -p "$MT5_DIR/Config" && \
-    python3 -c "
-import codecs
-content = '[Common]\r\nExpertsEnabled=1\r\nExpertsTrades=1\r\n'
-with open('$MT5_DIR/Config/common.ini', 'wb') as f:
+
+# 3. common.ini — create fresh with AutoTrading enabled
+common_ini = os.path.join(mt5_dir, 'Config', 'common.ini')
+with open(common_ini, 'wb') as f:
     f.write(codecs.BOM_UTF16_LE)
-    f.write(content.encode('utf-16-le'))
+    f.write('[Common]\r\nExpertsEnabled=1\r\nExpertsTrades=1\r\n'.encode('utf-16-le'))
 print('common.ini pre-baked with AutoTrading enabled.')
-"
+PREBAKE_EOF
 
 # Copy remaining app files
 COPY bridge_server.py /app/bridge_server.py
