@@ -48,7 +48,7 @@ Open **http://127.0.0.1:8000** in your browser.
 ### First-time setup
 
 1. The app will check your Docker environment and show a status banner if anything needs attention
-2. Click **Build Image** if prompted — this builds the MT5 Docker image (one-time, takes a few minutes)
+2. Click **Build Image** if prompted — this builds the MT5 Docker image (one-time, takes approximately 15 minutes)
 3. Click **+ Add Account** and enter your MT5 demo account credentials (login, password, server)
 4. Select the account from the sidebar and click **Start Container**
 5. Wait for the container to initialize (~1-2 min on x86, ~3-4 min on ARM Mac via QEMU)
