@@ -63,38 +63,42 @@ mkdir -p "$EXPERTS_DIR"
 cp /app/mql5/DataExporter.mq5 "$EXPERTS_DIR/"
 echo "EA source copied to $EXPERTS_DIR/"
 
-# Compile EA using MetaEditor
-echo "=== Compiling DataExporter EA ==="
-# MetaEditor64.exe (note capital letters) ships with MT5
-METAEDITOR="$MT5_DIR/MetaEditor64.exe"
-if [ -f "$METAEDITOR" ]; then
-    # MetaEditor /compile expects path relative to MT5 dir; run from MT5_DIR
-    cd "$MT5_DIR"
-    wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true
-    wineserver -w 2>/dev/null || true
-    cd /app
+# Compile EA — skip if pre-compiled .ex5 already exists from build time
+if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
+    echo "=== EA already compiled (pre-built in image), skipping compilation ==="
+else
+    echo "=== Compiling DataExporter EA ==="
+    # MetaEditor64.exe (note capital letters) ships with MT5
+    METAEDITOR="$MT5_DIR/MetaEditor64.exe"
+    if [ -f "$METAEDITOR" ]; then
+        # MetaEditor /compile expects path relative to MT5 dir; run from MT5_DIR
+        cd "$MT5_DIR"
+        wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true
+        wineserver -w 2>/dev/null || true
+        cd /app
 
-    # Check if compilation succeeded
-    if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
-        echo "EA compiled successfully."
+        # Check if compilation succeeded
+        if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
+            echo "EA compiled successfully."
+        else
+            echo "WARNING: MetaEditor compilation failed. Check MQL5/Logs/ for details."
+            # Fall back to pre-compiled .ex5 if available
+            if [ -f "/app/mql5/DataExporter.ex5" ]; then
+                cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
+                echo "Pre-compiled EA copied."
+            else
+                echo "WARNING: No pre-compiled EA available. EA must be compiled."
+            fi
+        fi
     else
-        echo "WARNING: MetaEditor compilation failed. Check MQL5/Logs/ for details."
-        # Fall back to pre-compiled .ex5 if available
+        echo "WARNING: metaeditor64.exe not found at $METAEDITOR"
+        ls -la "$MT5_DIR/"*.exe 2>/dev/null || echo "No .exe files in MT5 dir"
         if [ -f "/app/mql5/DataExporter.ex5" ]; then
             cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
             echo "Pre-compiled EA copied."
         else
-            echo "WARNING: No pre-compiled EA available. EA must be compiled."
+            echo "WARNING: No pre-compiled EA available."
         fi
-    fi
-else
-    echo "WARNING: metaeditor64.exe not found at $METAEDITOR"
-    ls -la "$MT5_DIR/"*.exe 2>/dev/null || echo "No .exe files in MT5 dir"
-    if [ -f "/app/mql5/DataExporter.ex5" ]; then
-        cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
-        echo "Pre-compiled EA copied."
-    else
-        echo "WARNING: No pre-compiled EA available."
     fi
 fi
 
