@@ -69,7 +69,9 @@ RUN set -e && \
     mkdir -p "$EXPERTS_DIR" && \
     cp /app/mql5/DataExporter.mq5 "$EXPERTS_DIR/" && \
     METAEDITOR="$MT5_DIR/MetaEditor64.exe" && \
-    Xvfb :99 -screen 0 1024x768x24 & XVFB_PID=$! && sleep 1 && \
+    rm -f /tmp/.X98-lock && \
+    Xvfb :98 -screen 0 1024x768x24 & XVFB_PID=$! && sleep 1 && \
+    export DISPLAY=:98 && \
     cd "$MT5_DIR" && \
     (wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true) && \
     (wineserver -w 2>/dev/null || true) && \

@@ -127,6 +127,7 @@ async def ensure_colima_x86() -> tuple[bool, str]:
         logger.info(f"Starting existing Colima '{COLIMA_PROFILE}' profile...")
         code, _, stderr = await _run(
             "colima", "start", COLIMA_PROFILE,
+            "--runtime", "docker",
             timeout=300,
         )
         if code != 0:
@@ -138,7 +139,7 @@ async def ensure_colima_x86() -> tuple[bool, str]:
         "colima", "start", COLIMA_PROFILE,
         "--arch", "x86_64",
         "--runtime", "docker",
-        "--cpu", "4",
+        "--cpu", "2",
         "--memory", "4",
         "--disk", "30",
         timeout=300,
@@ -336,7 +337,7 @@ async def build_image() -> bool:
         "--load",
         "-t", CONTAINER_IMAGE,
         str(bridge_dir),
-        timeout=600,
+        timeout=1200,
     )
     if code != 0:
         logger.error(f"Image build failed: {stderr}")

@@ -1,10 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "=== Initializing Wine prefix ==="
-wineboot --init 2>/dev/null || true
-wineserver -w 2>/dev/null || true
-echo "Wine prefix ready."
+# Skip wineboot --init if Wine prefix already exists (pre-built in image).
+# Under QEMU, wineboot --init takes 30-60s even on an existing prefix.
+if [ -d "/root/.wine/drive_c" ]; then
+    echo "=== Wine prefix already exists, skipping init ==="
+else
+    echo "=== Initializing Wine prefix ==="
+    wineboot --init 2>/dev/null || true
+    wineserver -w 2>/dev/null || true
+    echo "Wine prefix ready."
+fi
 
 # Install MT5 terminal if not present
 MT5_PATH=$(find /root/.wine -name "terminal64.exe" 2>/dev/null | head -1)
