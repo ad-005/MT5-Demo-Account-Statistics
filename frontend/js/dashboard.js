@@ -496,15 +496,16 @@ async function startContainer(id) {
         return;
     }
 
-    // Poll for bridge readiness (container takes 3-4 min under QEMU)
+    // Poll for bridge readiness (container takes 2-3 min under QEMU)
     const maxWait = 360;
-    for (let i = 0; i < maxWait; i += 5) {
+    const pollInterval = 2;
+    for (let i = 0; i < maxWait; i += pollInterval) {
         const elapsed = Math.floor(i / 60);
         const secs = i % 60;
         const timeStr = elapsed > 0 ? `${elapsed}m ${secs}s` : `${secs}s`;
         content.innerHTML = `<div class="loading"><div class="spinner"></div>Container starting... waiting for MT5 terminal (${timeStr})</div>`;
 
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, pollInterval * 1000));
         try {
             const health = await api.checkHealth(id);
             if (health.ready) {
