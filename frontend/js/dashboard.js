@@ -2,6 +2,8 @@ let selectedAccountId = null;
 let accounts = [];
 let dockerReady = false; // true when daemon is running + image is built
 let _dockerCheckTimer = null; // single timer ref to prevent duplicate polling chains
+let _refreshFab = null; // floating refresh button element
+let _refreshing = false; // guard against double-clicks
 
 // ---------------------------------------------------------------------------
 // Trading performance benchmarks
@@ -412,6 +414,7 @@ function renderAccounts() {
 }
 
 function renderContainerStopped(id) {
+    hideRefreshFab();
     const content = document.getElementById("dashboard-content");
     if (!dockerReady) {
         content.innerHTML = `
@@ -450,12 +453,14 @@ async function selectAccount(id) {
         return;
     }
 
+    hideRefreshFab();
     content.innerHTML = `<div class="loading"><div class="spinner"></div>Loading statistics...</div>`;
 
     try {
         const stats = await api.getStats(id);
         renderStats(stats);
     } catch (e) {
+        hideRefreshFab();
         content.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
     }
 }
@@ -484,6 +489,7 @@ async function startContainer(id) {
     }
 
     const content = document.getElementById("dashboard-content");
+    hideRefreshFab();
     content.innerHTML = `<div class="loading"><div class="spinner"></div>Starting container...</div>`;
 
     try {
@@ -528,6 +534,7 @@ async function removeAccount(id) {
         await api.deleteAccount(id);
         if (selectedAccountId === id) {
             selectedAccountId = null;
+            hideRefreshFab();
             document.getElementById("dashboard-content").innerHTML = `
                 <div class="empty-state"><h3>Select an Account</h3><p>Choose an account from the sidebar to view statistics.</p></div>
             `;
@@ -799,6 +806,8 @@ function renderStats(s) {
             <button class="btn btn-danger" style="padding:8px 24px" onclick="stopContainerUI('${selectedAccountId}')">Stop Container</button>
         </div>
     `;
+
+    showRefreshFab();
 }
 
 /**
@@ -881,6 +890,65 @@ function openModal() {
 function closeModal() {
     document.getElementById("modal-overlay").classList.remove("active");
     document.getElementById("account-form").reset();
+}
+
+// ---------------------------------------------------------------------------
+// Floating refresh button — re-fetches stats for the selected account
+// ---------------------------------------------------------------------------
+
+function ensureRefreshFab() {
+    if (_refreshFab) return _refreshFab;
+
+    const btn = document.createElement("button");
+    btn.className = "refresh-fab";
+    btn.setAttribute("aria-label", "Refresh statistics");
+    btn.setAttribute("title", "Refresh statistics");
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+        <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+    </svg>`;
+
+    btn.addEventListener("click", onRefreshClick);
+    document.body.appendChild(btn);
+    _refreshFab = btn;
+    return btn;
+}
+
+function showRefreshFab() {
+    const fab = ensureRefreshFab();
+    // Force reflow before adding class so the enter transition plays
+    fab.classList.remove("visible");
+    void fab.offsetWidth;
+    fab.classList.add("visible");
+}
+
+function hideRefreshFab() {
+    if (_refreshFab) {
+        _refreshFab.classList.remove("visible", "refresh-fab--loading");
+        _refreshing = false;
+    }
+}
+
+async function onRefreshClick() {
+    if (_refreshing || !selectedAccountId) return;
+
+    const acc = accounts.find(a => a.id === selectedAccountId);
+    if (!acc || acc.container_status !== "running") return;
+
+    _refreshing = true;
+    _refreshFab.classList.add("refresh-fab--loading");
+
+    try {
+        const stats = await api.getStats(selectedAccountId);
+        renderStats(stats);
+    } catch (e) {
+        console.error("Refresh failed:", e);
+    } finally {
+        _refreshing = false;
+        if (_refreshFab) _refreshFab.classList.remove("refresh-fab--loading");
+    }
 }
 
 async function onAddAccount(e) {
