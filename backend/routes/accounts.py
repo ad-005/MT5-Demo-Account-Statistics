@@ -51,6 +51,22 @@ async def start_account_container(account_id: str):
     acc = account_service.get_account(account_id)
     if not acc:
         raise HTTPException(404, "Account not found")
+
+    # Verify Docker environment is ready before attempting to start
+    docker_status = await docker_service.check_docker_environment()
+    if not docker_status.daemon_running:
+        raise HTTPException(
+            503,
+            "Docker daemon is not ready yet. "
+            "The Colima VM may still be starting — please wait a moment and try again.",
+        )
+    if not docker_status.image_built:
+        raise HTTPException(
+            400,
+            "The MT5 bridge image has not been built yet. "
+            "Please build it first from the dashboard.",
+        )
+
     port = await docker_service.start_container(acc)
     if port is None:
         raise HTTPException(500, "Failed to start container")

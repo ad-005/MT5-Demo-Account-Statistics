@@ -1,10 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "=== Initializing Wine prefix ==="
-wineboot --init 2>/dev/null || true
-wineserver -w 2>/dev/null || true
-echo "Wine prefix ready."
+# Skip wineboot --init if Wine prefix already exists (pre-built in image).
+# Under QEMU, wineboot --init takes 30-60s even on an existing prefix.
+if [ -d "/root/.wine/drive_c" ]; then
+    echo "=== Wine prefix already exists, skipping init ==="
+else
+    echo "=== Initializing Wine prefix ==="
+    wineboot --init 2>/dev/null || true
+    wineserver -w 2>/dev/null || true
+    echo "Wine prefix ready."
+fi
 
 # Install MT5 terminal if not present
 MT5_PATH=$(find /root/.wine -name "terminal64.exe" 2>/dev/null | head -1)
@@ -29,16 +35,21 @@ if [ -z "$MT5_PATH" ]; then
     fi
 
     # Wait for installer to finish extracting all files (terminal64.exe appears
-    # before it's fully written). Give installer extra time, then wait for it.
+    # before it's fully written). Poll until installer exits instead of a fixed sleep.
     echo "Waiting for installer to finish..."
-    sleep 30
+    for i in $(seq 1 90); do
+        sleep 2
+        if ! kill -0 $INSTALLER_PID 2>/dev/null; then
+            echo "Installer process exited (waited ~$((i*2))s after terminal64.exe found)"
+            break
+        fi
+    done
     kill $INSTALLER_PID 2>/dev/null || true
     wait $INSTALLER_PID 2>/dev/null || true
     # Kill winemenubuilder — these linger and block wineserver -w indefinitely
     pkill -f winemenubuilder 2>/dev/null || true
     # Timeout wineserver -w to avoid hanging if other Wine processes linger
     timeout 30 wineserver -w 2>/dev/null || true
-    sleep 5
     echo "MT5 installation complete."
 fi
 
@@ -58,38 +69,42 @@ mkdir -p "$EXPERTS_DIR"
 cp /app/mql5/DataExporter.mq5 "$EXPERTS_DIR/"
 echo "EA source copied to $EXPERTS_DIR/"
 
-# Compile EA using MetaEditor
-echo "=== Compiling DataExporter EA ==="
-# MetaEditor64.exe (note capital letters) ships with MT5
-METAEDITOR="$MT5_DIR/MetaEditor64.exe"
-if [ -f "$METAEDITOR" ]; then
-    # MetaEditor /compile expects path relative to MT5 dir; run from MT5_DIR
-    cd "$MT5_DIR"
-    wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true
-    wineserver -w 2>/dev/null || true
-    cd /app
+# Compile EA — skip if pre-compiled .ex5 already exists from build time
+if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
+    echo "=== EA already compiled (pre-built in image), skipping compilation ==="
+else
+    echo "=== Compiling DataExporter EA ==="
+    # MetaEditor64.exe (note capital letters) ships with MT5
+    METAEDITOR="$MT5_DIR/MetaEditor64.exe"
+    if [ -f "$METAEDITOR" ]; then
+        # MetaEditor /compile expects path relative to MT5 dir; run from MT5_DIR
+        cd "$MT5_DIR"
+        wine "$METAEDITOR" /compile:"MQL5\\Experts\\DataExporter.mq5" /log 2>/dev/null || true
+        wineserver -w 2>/dev/null || true
+        cd /app
 
-    # Check if compilation succeeded
-    if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
-        echo "EA compiled successfully."
+        # Check if compilation succeeded
+        if [ -f "$EXPERTS_DIR/DataExporter.ex5" ]; then
+            echo "EA compiled successfully."
+        else
+            echo "WARNING: MetaEditor compilation failed. Check MQL5/Logs/ for details."
+            # Fall back to pre-compiled .ex5 if available
+            if [ -f "/app/mql5/DataExporter.ex5" ]; then
+                cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
+                echo "Pre-compiled EA copied."
+            else
+                echo "WARNING: No pre-compiled EA available. EA must be compiled."
+            fi
+        fi
     else
-        echo "WARNING: MetaEditor compilation failed. Check MQL5/Logs/ for details."
-        # Fall back to pre-compiled .ex5 if available
+        echo "WARNING: metaeditor64.exe not found at $METAEDITOR"
+        ls -la "$MT5_DIR/"*.exe 2>/dev/null || echo "No .exe files in MT5 dir"
         if [ -f "/app/mql5/DataExporter.ex5" ]; then
             cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
             echo "Pre-compiled EA copied."
         else
-            echo "WARNING: No pre-compiled EA available. EA must be compiled."
+            echo "WARNING: No pre-compiled EA available."
         fi
-    fi
-else
-    echo "WARNING: metaeditor64.exe not found at $METAEDITOR"
-    ls -la "$MT5_DIR/"*.exe 2>/dev/null || echo "No .exe files in MT5 dir"
-    if [ -f "/app/mql5/DataExporter.ex5" ]; then
-        cp /app/mql5/DataExporter.ex5 "$EXPERTS_DIR/"
-        echo "Pre-compiled EA copied."
-    else
-        echo "WARNING: No pre-compiled EA available."
     fi
 fi
 
@@ -244,8 +259,13 @@ start_terminal() {
     wine "$MT5_PATH" /portable "/config:C:\\mt5config.ini" &
 }
 
+# Start bridge HTTP server immediately — it handles "not ready yet" gracefully
+# via its /health endpoint returning {"status": "degraded"} until EA data appears.
+echo "=== Starting bridge HTTP server ==="
+python3 /app/bridge_server.py &
+BRIDGE_PID=$!
+
 start_terminal
-sleep 30
 
 # Background watchdog: restart terminal if it dies (e.g., after LiveUpdate)
 (
@@ -260,6 +280,5 @@ sleep 30
 WATCHDOG_PID=$!
 echo "Terminal watchdog started (pid=$WATCHDOG_PID)"
 
-# Start bridge HTTP server (Linux Python) in foreground
-echo "=== Starting bridge HTTP server ==="
-exec python3 /app/bridge_server.py
+# Keep bridge as the foreground process
+wait $BRIDGE_PID

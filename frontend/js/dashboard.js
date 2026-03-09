@@ -1,5 +1,7 @@
 let selectedAccountId = null;
 let accounts = [];
+let dockerReady = false; // true when daemon is running + image is built
+let _dockerCheckTimer = null; // single timer ref to prevent duplicate polling chains
 
 // ---------------------------------------------------------------------------
 // Trading performance benchmarks
@@ -178,44 +180,203 @@ function toggleTooltip(iconEl) {
     card.classList.toggle("tooltip-active", isOpen);
 }
 
+function scheduleDockerCheck(delayMs) {
+    clearTimeout(_dockerCheckTimer);
+    _dockerCheckTimer = setTimeout(checkDocker, delayMs);
+}
+
 async function checkDocker() {
     try {
         const status = await api.getDockerStatus();
         const banner = document.getElementById("docker-banner");
+        const wasReady = dockerReady;
+        dockerReady = status.docker_available && status.daemon_running && status.image_built;
+
         if (!status.docker_available || !status.daemon_running) {
-            banner.className = "docker-banner warning";
+            banner.className = "docker-banner setup-banner";
             banner.innerHTML = `
-                <span class="message">${status.message}</span>
+                <div class="setup-banner__content">
+                    <div class="setup-banner__icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <div class="setup-banner__text">
+                        <h3 class="setup-banner__title">Getting things ready</h3>
+                        <p class="setup-banner__desc">Your trading environment is warming up. This should only take a moment.</p>
+                    </div>
+                    <div class="spinner"></div>
+                </div>
             `;
-            banner.style.display = "flex";
+            banner.style.display = "block";
+            // Re-check frequently until the daemon is responsive
+            scheduleDockerCheck(5000);
         } else if (!status.image_built) {
-            banner.className = "docker-banner warning";
+            banner.className = "docker-banner setup-banner";
             banner.innerHTML = `
-                <span class="message">${status.message}</span>
-                <button class="btn btn-primary btn-sm" onclick="buildImage()">Build Image</button>
+                <div class="setup-banner__content">
+                    <div class="setup-banner__icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <div class="setup-banner__text">
+                        <h3 class="setup-banner__title">Welcome — let's get you set up</h3>
+                        <p class="setup-banner__desc">Your trading environment needs a one-time setup before you can connect accounts. This typically takes 5-15 minutes and only happens once.</p>
+                    </div>
+                    <button class="btn btn-primary setup-banner__btn" onclick="buildImage()">
+                        <span>Set Up Now</span>
+                        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    </button>
+                </div>
             `;
-            banner.style.display = "flex";
+            banner.style.display = "block";
+            // Keep polling in case image becomes available
+            scheduleDockerCheck(15000);
         } else {
             banner.style.display = "none";
+            // Keep polling at a slower cadence so dockerReady stays current
+            scheduleDockerCheck(30000);
+        }
+
+        // Re-render account content area whenever readiness changes
+        if (wasReady !== dockerReady && selectedAccountId) {
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            if (acc && acc.container_status !== "running") {
+                renderContainerStopped(selectedAccountId);
+            }
         }
     } catch (e) {
         console.error("Docker check failed:", e);
+        // On error, mark docker as not ready and keep retrying
+        const wasReady = dockerReady;
+        dockerReady = false;
+        if (wasReady && selectedAccountId) {
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            if (acc && acc.container_status !== "running") {
+                renderContainerStopped(selectedAccountId);
+            }
+        }
+        scheduleDockerCheck(5000);
     }
+}
+
+let _buildTimerInterval = null;
+
+const BUILD_PHASES = [
+    { label: "Downloading base components", minTime: 0 },
+    { label: "Installing trading platform", minTime: 60 },
+    { label: "Configuring environment", minTime: 180 },
+    { label: "Finalizing setup", minTime: 360 },
+];
+
+function _formatElapsed(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function _getCurrentPhase(elapsed) {
+    let phase = BUILD_PHASES[0];
+    for (const p of BUILD_PHASES) {
+        if (elapsed >= p.minTime) phase = p;
+    }
+    return phase;
 }
 
 async function buildImage() {
     const banner = document.getElementById("docker-banner");
-    banner.innerHTML = `<span class="message">Building image... this may take several minutes.</span><div class="spinner"></div>`;
+    let elapsed = 0;
+
+    function renderBuildProgress() {
+        const phase = _getCurrentPhase(elapsed);
+        const phaseIndex = BUILD_PHASES.indexOf(phase);
+
+        const stepsHtml = BUILD_PHASES.map((p, i) => {
+            let stepCls = "setup-step";
+            if (i < phaseIndex) stepCls += " setup-step--done";
+            else if (i === phaseIndex) stepCls += " setup-step--active";
+            return `<div class="${stepCls}"><span class="setup-step__dot"></span><span class="setup-step__label">${p.label}</span></div>`;
+        }).join("");
+
+        banner.className = "docker-banner setup-banner setup-banner--building";
+        banner.innerHTML = `
+            <div class="setup-build__content">
+                <div class="setup-build__header">
+                    <div class="setup-build__pulse"></div>
+                    <div>
+                        <h3 class="setup-banner__title">Setting up your trading environment</h3>
+                        <p class="setup-build__subtitle">This is a one-time process. Feel free to grab a coffee while we get things ready.</p>
+                    </div>
+                </div>
+                <div class="setup-build__progress">
+                    <div class="setup-build__bar-track">
+                        <div class="setup-build__bar-fill" style="width: ${Math.min(95, (elapsed / 600) * 100)}%"></div>
+                    </div>
+                    <span class="setup-build__elapsed">${_formatElapsed(elapsed)} elapsed</span>
+                </div>
+                <div class="setup-steps">${stepsHtml}</div>
+            </div>
+        `;
+        banner.style.display = "block";
+    }
+
+    renderBuildProgress();
+    _buildTimerInterval = setInterval(() => {
+        elapsed++;
+        renderBuildProgress();
+    }, 1000);
+
     try {
         const result = await api.buildImage();
-        banner.innerHTML = `<span class="message">${result.message}</span>`;
+        clearInterval(_buildTimerInterval);
+        _buildTimerInterval = null;
+
         if (result.status === "ok") {
-            banner.className = "docker-banner";
-            setTimeout(() => banner.style.display = "none", 3000);
+            dockerReady = true;
+            banner.className = "docker-banner setup-banner setup-banner--success";
+            banner.innerHTML = `
+                <div class="setup-success__content">
+                    <svg class="setup-success__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <div>
+                        <h3 class="setup-banner__title">You're all set!</h3>
+                        <p class="setup-build__subtitle">Your trading environment is ready. You can now connect and start your accounts.</p>
+                    </div>
+                </div>
+            `;
+            setTimeout(() => {
+                banner.classList.add("setup-banner--fade-out");
+                setTimeout(() => { banner.style.display = "none"; }, 500);
+            }, 3000);
+            if (selectedAccountId) renderContainerStopped(selectedAccountId);
         }
     } catch (e) {
-        banner.innerHTML = `<span class="message">Build failed: ${e.message}</span>`;
-        banner.className = "docker-banner error";
+        clearInterval(_buildTimerInterval);
+        _buildTimerInterval = null;
+
+        banner.className = "docker-banner setup-banner setup-banner--error";
+        banner.innerHTML = `
+            <div class="setup-error__content">
+                <svg class="setup-error__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <div>
+                    <h3 class="setup-banner__title">Setup ran into a problem</h3>
+                    <p class="setup-build__subtitle">Something went wrong during the setup process. This can sometimes happen on the first attempt — trying again usually resolves it.</p>
+                </div>
+                <button class="btn btn-primary setup-banner__btn" onclick="buildImage()">
+                    <span>Try Again</span>
+                </button>
+            </div>
+        `;
     }
 }
 
@@ -250,6 +411,31 @@ function renderAccounts() {
     `).join("");
 }
 
+function renderContainerStopped(id) {
+    const content = document.getElementById("dashboard-content");
+    if (!dockerReady) {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>Container Not Running</h3>
+                <p>Waiting for Docker environment to be ready...</p>
+                <button class="btn btn-primary" style="margin-top:16px" disabled
+                    title="Docker daemon is still starting — please wait">
+                    <span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>
+                    Warming Up
+                </button>
+            </div>
+        `;
+    } else {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>Container Not Running</h3>
+                <p>Start the container to view statistics.</p>
+                <button class="btn btn-primary" style="margin-top:16px" onclick="startContainer('${id}')">Start Container</button>
+            </div>
+        `;
+    }
+}
+
 async function selectAccount(id) {
     selectedAccountId = id;
     renderAccounts();
@@ -260,13 +446,7 @@ async function selectAccount(id) {
     const content = document.getElementById("dashboard-content");
 
     if (acc.container_status !== "running") {
-        content.innerHTML = `
-            <div class="empty-state">
-                <h3>Container Not Running</h3>
-                <p>Start the container to view statistics.</p>
-                <button class="btn btn-primary" style="margin-top:16px" onclick="startContainer('${id}')">Start Container</button>
-            </div>
-        `;
+        renderContainerStopped(id);
         return;
     }
 
@@ -281,13 +461,38 @@ async function selectAccount(id) {
 }
 
 async function startContainer(id) {
+    // Guard: if Docker isn't ready, show the disabled state instead of attempting
+    if (!dockerReady) {
+        renderContainerStopped(id);
+        return;
+    }
+
+    // Fresh check — dockerReady may be stale if polling hasn't caught a change
+    try {
+        const status = await api.getDockerStatus();
+        dockerReady = status.docker_available && status.daemon_running && status.image_built;
+        if (!dockerReady) {
+            checkDocker();
+            renderContainerStopped(id);
+            return;
+        }
+    } catch (e) {
+        dockerReady = false;
+        checkDocker();
+        renderContainerStopped(id);
+        return;
+    }
+
     const content = document.getElementById("dashboard-content");
     content.innerHTML = `<div class="loading"><div class="spinner"></div>Starting container...</div>`;
 
     try {
         await api.startContainer(id);
     } catch (e) {
-        content.innerHTML = `<div class="empty-state"><h3>Failed to Start</h3><p>${e.message}</p></div>`;
+        // Start failed — re-check Docker status; if Docker went down, show disabled button
+        dockerReady = false;
+        checkDocker(); // async re-check will update dockerReady and re-render
+        renderContainerStopped(id);
         return;
     }
 
