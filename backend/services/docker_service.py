@@ -138,7 +138,7 @@ async def ensure_colima_x86() -> tuple[bool, str]:
         "colima", "start", COLIMA_PROFILE,
         "--arch", "x86_64",
         "--runtime", "docker",
-        "--cpu", "2",
+        "--cpu", "4",
         "--memory", "4",
         "--disk", "30",
         timeout=300,

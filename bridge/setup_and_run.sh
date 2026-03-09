@@ -29,16 +29,21 @@ if [ -z "$MT5_PATH" ]; then
     fi
 
     # Wait for installer to finish extracting all files (terminal64.exe appears
-    # before it's fully written). Give installer extra time, then wait for it.
+    # before it's fully written). Poll until installer exits instead of a fixed sleep.
     echo "Waiting for installer to finish..."
-    sleep 30
+    for i in $(seq 1 90); do
+        sleep 2
+        if ! kill -0 $INSTALLER_PID 2>/dev/null; then
+            echo "Installer process exited (waited ~$((i*2))s after terminal64.exe found)"
+            break
+        fi
+    done
     kill $INSTALLER_PID 2>/dev/null || true
     wait $INSTALLER_PID 2>/dev/null || true
     # Kill winemenubuilder — these linger and block wineserver -w indefinitely
     pkill -f winemenubuilder 2>/dev/null || true
     # Timeout wineserver -w to avoid hanging if other Wine processes linger
     timeout 30 wineserver -w 2>/dev/null || true
-    sleep 5
     echo "MT5 installation complete."
 fi
 
@@ -244,8 +249,13 @@ start_terminal() {
     wine "$MT5_PATH" /portable "/config:C:\\mt5config.ini" &
 }
 
+# Start bridge HTTP server immediately — it handles "not ready yet" gracefully
+# via its /health endpoint returning {"status": "degraded"} until EA data appears.
+echo "=== Starting bridge HTTP server ==="
+python3 /app/bridge_server.py &
+BRIDGE_PID=$!
+
 start_terminal
-sleep 30
 
 # Background watchdog: restart terminal if it dies (e.g., after LiveUpdate)
 (
@@ -260,6 +270,5 @@ sleep 30
 WATCHDOG_PID=$!
 echo "Terminal watchdog started (pid=$WATCHDOG_PID)"
 
-# Start bridge HTTP server (Linux Python) in foreground
-echo "=== Starting bridge HTTP server ==="
-exec python3 /app/bridge_server.py
+# Keep bridge as the foreground process
+wait $BRIDGE_PID
