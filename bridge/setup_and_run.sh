@@ -125,121 +125,31 @@ ShutdownTerminal=0
 EOF
 echo "Config created: login=${MT5_LOGIN:-0}, server=${MT5_SERVER:-}, EA=DataExporter"
 
-# Create chart profile with EA auto-attached
-# MT5 in portable mode uses Profiles/ (not MQL5/Profiles/)
-echo "=== Setting up chart profile with DataExporter EA ==="
+# Chart profiles and common.ini are pre-baked in the Docker image.
+# Only create them at runtime if missing (fallback for non-prebaked images).
 PROFILES_DIR="$MT5_DIR/Profiles/Charts/Default"
-mkdir -p "$PROFILES_DIR"
-
-# Write chart file in UTF-16LE (MT5's native format) with EA attached
-python3 -c "
+COMMON_INI="$MT5_DIR/Config/common.ini"
+if [ -f "$PROFILES_DIR/chart01.chr" ] && [ -f "$COMMON_INI" ]; then
+    echo "=== Chart profiles and common.ini pre-baked, skipping setup ==="
+else
+    echo "=== Creating chart profile and common.ini (not pre-baked) ==="
+    mkdir -p "$PROFILES_DIR"
+    python3 -c "
 import codecs
-chart = '''<chart>
-id=1
-symbol=EURUSD
-period_type=1
-period_size=1
-digits=5
-<expert>
-name=DataExporter
-flags=339
-window_num=0
-<inputs>
-</inputs>
-</expert>
-<window>
-height=100
-<indicator>
-name=Main
-path=
-apply=1
-show_data=1
-</indicator>
-</window>
-</chart>
-'''
+chart = '<chart>\r\nid=1\r\nsymbol=EURUSD\r\nperiod_type=1\r\nperiod_size=1\r\ndigits=5\r\n<expert>\r\nname=DataExporter\r\nflags=339\r\nwindow_num=0\r\n<inputs>\r\n</inputs>\r\n</expert>\r\n<window>\r\nheight=100\r\n<indicator>\r\nname=Main\r\npath=\r\napply=1\r\nshow_data=1\r\n</indicator>\r\n</window>\r\n</chart>\r\n'
 with open('$PROFILES_DIR/chart01.chr', 'wb') as f:
     f.write(codecs.BOM_UTF16_LE)
     f.write(chart.encode('utf-16-le'))
-print('Chart profile created with DataExporter EA attached.')
+print('Chart profile created.')
 "
-
-# Inject EA into all existing chart profiles (MT5 may have created them during install)
-echo "=== Injecting EA into all chart profiles ==="
-python3 << 'PYEOF'
-import codecs, os, glob
-
-expert_section = """<expert>
-name=DataExporter
-flags=339
-window_num=0
-<inputs>
-</inputs>
-</expert>"""
-
-mt5_dir = os.environ.get("MT5_DIR", "")
-if not mt5_dir:
-    import subprocess
-    result = subprocess.run(["find", "/root/.wine", "-name", "terminal64.exe"], capture_output=True, text=True)
-    mt5_dir = os.path.dirname(result.stdout.strip().split("\n")[0]) if result.stdout.strip() else ""
-
-for chr_path in glob.glob(f"{mt5_dir}/Profiles/Charts/*/chart*.chr"):
-    try:
-        with open(chr_path, "rb") as f:
-            raw = f.read()
-        # Try UTF-16LE decoding
-        try:
-            content = raw.decode("utf-16-le").lstrip("\ufeff")
-        except:
-            content = raw.decode("utf-8", errors="replace")
-
-        if "<expert>" in content:
-            continue  # Already has an expert
-
-        # Insert expert section before </chart>
-        if "</chart>" in content:
-            content = content.replace("</chart>", expert_section + "\n</chart>")
-            with open(chr_path, "wb") as f:
-                f.write(codecs.BOM_UTF16_LE)
-                f.write(content.encode("utf-16-le"))
-            print(f"  Injected EA into {os.path.basename(os.path.dirname(chr_path))}/{os.path.basename(chr_path)}")
-    except Exception as e:
-        print(f"  Warning: could not process {chr_path}: {e}")
-
-print("EA injection complete.")
-PYEOF
-
-# Enable AutoTrading in common.ini
-echo "=== Enabling AutoTrading in terminal config ==="
-COMMON_INI="$MT5_DIR/Config/common.ini"
-if [ -f "$COMMON_INI" ]; then
+    mkdir -p "$MT5_DIR/Config"
     python3 -c "
 import codecs
-path = '$COMMON_INI'
-with open(path, 'rb') as f:
-    raw = f.read()
-try:
-    content = raw.decode('utf-16-le').lstrip('\ufeff')
-except:
-    content = raw.decode('utf-8', errors='replace')
-if 'ExpertsEnabled' not in content:
-    content = content.replace('[Common]', '[Common]\nExpertsEnabled=1\nExpertsTrades=1', 1)
-    with open(path, 'wb') as f:
-        f.write(codecs.BOM_UTF16_LE)
-        f.write(content.encode('utf-16-le'))
-    print('AutoTrading enabled in common.ini')
-else:
-    print('AutoTrading already enabled')
-"
-else
-    echo "WARNING: common.ini not found, creating..."
-    python3 -c "
-import codecs
-content = '[Common]\nExpertsEnabled=1\nExpertsTrades=1\n'
+content = '[Common]\r\nExpertsEnabled=1\r\nExpertsTrades=1\r\n'
 with open('$COMMON_INI', 'wb') as f:
     f.write(codecs.BOM_UTF16_LE)
     f.write(content.encode('utf-16-le'))
-print('common.ini created with AutoTrading enabled')
+print('common.ini created with AutoTrading enabled.')
 "
 fi
 
