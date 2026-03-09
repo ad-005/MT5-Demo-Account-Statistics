@@ -1,0 +1,441 @@
+let reports = [];
+let selectedIds = new Set();
+let currentView = "list"; // "list" | "detail" | "compare"
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadReports();
+    document.getElementById("account-filter").addEventListener("change", onFilterChange);
+    document.getElementById("btn-compare").addEventListener("click", onCompareClick);
+});
+
+async function loadReports() {
+    try {
+        const filter = document.getElementById("account-filter").value;
+        const params = filter ? { account_id: filter } : {};
+        reports = await api.getReports(params);
+        await populateAccountFilter();
+        renderReportList();
+    } catch (e) {
+        document.getElementById("reports-content").innerHTML =
+            `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
+    }
+}
+
+async function populateAccountFilter() {
+    const select = document.getElementById("account-filter");
+    const current = select.value;
+    // Gather unique accounts from reports
+    const seen = new Map();
+    reports.forEach(r => {
+        if (!seen.has(r.account_id)) seen.set(r.account_id, r.account_name);
+    });
+
+    // Also try to fetch live accounts
+    try {
+        const accs = await api.getAccounts();
+        accs.forEach(a => {
+            if (!seen.has(a.id)) seen.set(a.id, a.name);
+        });
+    } catch (_) {}
+
+    const opts = [`<option value="">All Accounts</option>`];
+    seen.forEach((name, id) => {
+        opts.push(`<option value="${id}" ${id === current ? "selected" : ""}>${name}</option>`);
+    });
+    select.innerHTML = opts.join("");
+}
+
+function onFilterChange() {
+    selectedIds.clear();
+    updateCompareButton();
+    loadReports();
+}
+
+function renderReportList() {
+    const content = document.getElementById("reports-content");
+
+    if (reports.length === 0) {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>No Reports Yet</h3>
+                <p>Save a snapshot from the Dashboard to create your first report.</p>
+            </div>`;
+        return;
+    }
+
+    content.innerHTML = `<div class="report-cards">${reports.map(r => reportCard(r)).join("")}</div>`;
+}
+
+function reportCard(r) {
+    const date = new Date(r.created_at).toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+    });
+    const checked = selectedIds.has(r.id) ? "checked" : "";
+    const profit = r.stats.net_profit;
+    const profitCls = profit >= 0 ? "positive" : "negative";
+    const profitStr = (profit >= 0 ? "+" : "") + "$" + profit.toFixed(2);
+    const scoreHtml = r.overall_score != null
+        ? `<span class="report-card__score ${r.overall_score >= 70 ? "score-green" : r.overall_score >= 40 ? "score-yellow" : "score-red"}">${r.overall_score} ${r.overall_grade || ""}</span>`
+        : "";
+    const dateRange = r.date_range_start || r.date_range_end
+        ? `<span class="report-card__range">${r.date_range_start || "..."} to ${r.date_range_end || "..."}</span>`
+        : "";
+
+    return `
+        <div class="report-card ${selectedIds.has(r.id) ? "report-card--selected" : ""}">
+            <div class="report-card__check">
+                <input type="checkbox" ${checked} onchange="toggleSelect('${r.id}', this.checked)" />
+            </div>
+            <div class="report-card__body" onclick="viewReport('${r.id}')">
+                <div class="report-card__top">
+                    <div class="report-card__label">${escHtml(r.label)}</div>
+                    <div class="report-card__stats">
+                        ${scoreHtml}
+                        <span class="report-card__profit ${profitCls}">${profitStr}</span>
+                    </div>
+                </div>
+                <div class="report-card__meta">
+                    <span>${escHtml(r.account_name)}</span>
+                    <span class="meta-sep">&middot;</span>
+                    <span>${r.trades_count} trades</span>
+                    <span class="meta-sep">&middot;</span>
+                    <span>${date}</span>
+                    ${dateRange ? `<span class="meta-sep">&middot;</span>${dateRange}` : ""}
+                </div>
+            </div>
+            <button class="report-card__delete" onclick="deleteReport('${r.id}')" title="Delete report">&times;</button>
+        </div>`;
+}
+
+function escHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function toggleSelect(id, checked) {
+    if (checked) {
+        if (selectedIds.size >= 2) {
+            // Deselect oldest
+            const first = selectedIds.values().next().value;
+            selectedIds.delete(first);
+        }
+        selectedIds.add(id);
+    } else {
+        selectedIds.delete(id);
+    }
+    updateCompareButton();
+    renderReportList();
+}
+
+function updateCompareButton() {
+    const btn = document.getElementById("btn-compare");
+    btn.disabled = selectedIds.size !== 2;
+    btn.textContent = selectedIds.size === 2 ? "Compare Selected" : `Compare (${selectedIds.size}/2)`;
+}
+
+async function onCompareClick() {
+    if (selectedIds.size !== 2) return;
+    const [leftId, rightId] = [...selectedIds];
+    try {
+        const comparison = await api.compareReports(leftId, rightId);
+        renderComparison(comparison);
+    } catch (e) {
+        alert("Comparison failed: " + e.message);
+    }
+}
+
+async function viewReport(id) {
+    const content = document.getElementById("reports-content");
+    content.innerHTML = `<div class="loading"><div class="spinner"></div>Loading report...</div>`;
+
+    try {
+        const report = await api.getReport(id);
+        renderReportDetail(report);
+    } catch (e) {
+        content.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
+    }
+}
+
+function renderReportDetail(r) {
+    currentView = "detail";
+    const content = document.getElementById("reports-content");
+    const date = new Date(r.created_at).toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+    });
+    const s = r.stats;
+
+    const dateRange = r.date_range_start || r.date_range_end
+        ? `<div class="report-detail__range">Date range: ${r.date_range_start || "..."} to ${r.date_range_end || "..."}</div>`
+        : "";
+
+    const scoreBlock = r.overall_score != null
+        ? `<div class="report-detail__score ${r.overall_score >= 70 ? "score-green" : r.overall_score >= 40 ? "score-yellow" : "score-red"}">
+               <span class="report-detail__score-value">${r.overall_score}</span>
+               <span class="report-detail__score-grade">${r.overall_grade || ""}</span>
+           </div>`
+        : "";
+
+    content.innerHTML = `
+        <div class="report-detail">
+            <div class="report-detail__header">
+                <button class="btn btn-sm" onclick="backToList()">Back</button>
+                ${scoreBlock}
+                <div>
+                    <h3>${escHtml(r.label)}</h3>
+                    <div class="report-detail__meta">${escHtml(r.account_name)} | ${r.trades_count} trades | ${date}</div>
+                    ${dateRange}
+                </div>
+                <div class="report-detail__actions">
+                    <button class="btn btn-sm" onclick="compareLiveUI('${r.id}')">Compare with Live</button>
+                </div>
+            </div>
+
+            <div class="stats-section-header">Performance</div>
+            <div class="stats-grid">
+                ${simpleStatCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0)}
+                ${simpleStatCard("Win Rate", s.win_rate + "%", s.win_rate >= 50)}
+                ${simpleStatCard("Profit Factor", s.profit_factor.toFixed(2))}
+                ${simpleStatCard("Avg Win", "$" + s.average_profit.toFixed(2), true)}
+                ${simpleStatCard("Largest Win", "$" + s.largest_win.toFixed(2), true)}
+                ${simpleStatCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0)}
+            </div>
+
+            <div class="stats-section-header">Risk</div>
+            <div class="stats-grid">
+                ${simpleStatCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false)}
+                ${simpleStatCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false)}
+                ${simpleStatCard("Avg Loss", "$" + s.average_loss.toFixed(2), false)}
+                ${simpleStatCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false)}
+            </div>
+
+            <div class="stats-section-header">Ratios</div>
+            <div class="stats-grid">
+                ${simpleStatCard("Sharpe Ratio", s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1)}
+                ${simpleStatCard("Sortino Ratio", s.sortino_ratio.toFixed(2), s.sortino_ratio >= 1)}
+                ${simpleStatCard("R:R Ratio", s.risk_reward_ratio.toFixed(2))}
+            </div>
+
+            <div class="stats-section-header">Volume & Streaks</div>
+            <div class="stats-grid">
+                ${simpleStatCard("Total Trades", s.total_trades)}
+                ${simpleStatCard("Buy %", s.buy_percentage + "%")}
+                ${simpleStatCard("Sell %", s.sell_percentage + "%")}
+                ${simpleStatCard("Consec. Wins", s.consecutive_wins)}
+                ${simpleStatCard("Consec. Losses", s.consecutive_losses)}
+            </div>
+
+            ${renderSessionDaily(s)}
+            ${renderSymbolBreakdown(s)}
+        </div>`;
+}
+
+function simpleStatCard(label, value, positive = null) {
+    let cls = "";
+    if (positive === true) cls = "positive";
+    else if (positive === false) cls = "negative";
+    return `
+        <div class="stat-card">
+            <div class="label-row"><div class="label">${label}</div></div>
+            <div class="value ${cls}">${value}</div>
+        </div>`;
+}
+
+function renderSessionDaily(s) {
+    let html = "";
+    if (s.session_win_rates && Object.keys(s.session_win_rates).length > 0) {
+        html += `<div class="section"><h2>Session Win Rates</h2><div class="bar-chart">`;
+        for (const [label, pct] of Object.entries(s.session_win_rates)) {
+            html += `<div class="bar-row">
+                <span class="bar-label">${label}</span>
+                <div class="bar-track"><div class="bar-fill ${pct >= 50 ? "green" : "blue"}" style="width:${Math.max(pct, 4)}%"></div></div>
+                <span class="bar-value">${pct}%</span>
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+    if (s.daily_win_rates && Object.keys(s.daily_win_rates).length > 0) {
+        html += `<div class="section"><h2>Daily Win Rates</h2><div class="bar-chart">`;
+        for (const [label, pct] of Object.entries(s.daily_win_rates)) {
+            html += `<div class="bar-row">
+                <span class="bar-label">${label}</span>
+                <div class="bar-track"><div class="bar-fill ${pct >= 50 ? "green" : "blue"}" style="width:${Math.max(pct, 4)}%"></div></div>
+                <span class="bar-value">${pct}%</span>
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+    return html;
+}
+
+function renderSymbolBreakdown(s) {
+    if (!s.symbol_breakdown || Object.keys(s.symbol_breakdown).length === 0) return "";
+    let rows = "";
+    for (const [sym, d] of Object.entries(s.symbol_breakdown)) {
+        rows += `<tr>
+            <td>${sym}</td>
+            <td>${d.trades}</td>
+            <td>${d.win_rate}%</td>
+            <td class="${d.pnl >= 0 ? "positive" : "negative"}">$${d.pnl.toFixed(2)}</td>
+        </tr>`;
+    }
+    return `<div class="section"><h2>Symbol Breakdown</h2>
+        <table><thead><tr><th>Symbol</th><th>Trades</th><th>Win Rate</th><th>P&L</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderComparison(c) {
+    currentView = "compare";
+    const content = document.getElementById("reports-content");
+
+    const DISPLAY_LABELS = {
+        total_trades: "Total Trades",
+        winning_trades: "Winning Trades",
+        losing_trades: "Losing Trades",
+        win_rate: "Win Rate",
+        net_profit: "Net Profit",
+        total_profit: "Total Profit",
+        total_loss: "Total Loss",
+        average_profit: "Avg Win",
+        average_loss: "Avg Loss",
+        largest_win: "Largest Win",
+        largest_loss: "Largest Loss",
+        profit_factor: "Profit Factor",
+        sharpe_ratio: "Sharpe Ratio",
+        sortino_ratio: "Sortino Ratio",
+        max_drawdown: "Max Drawdown",
+        max_drawdown_pct: "Max DD %",
+        average_trade: "Avg Trade",
+        expectancy: "Expectancy",
+        consecutive_wins: "Consec. Wins",
+        consecutive_losses: "Consec. Losses",
+        risk_reward_ratio: "R:R Ratio",
+        buy_percentage: "Buy %",
+        sell_percentage: "Sell %",
+    };
+
+    let rows = "";
+    for (const [field, d] of Object.entries(c.deltas)) {
+        const label = DISPLAY_LABELS[field] || field;
+        const leftVal = formatDeltaValue(field, d.left);
+        const rightVal = formatDeltaValue(field, d.right);
+        const deltaVal = d.delta > 0 ? "+" + formatDeltaValue(field, d.delta) : formatDeltaValue(field, d.delta);
+        const pctStr = d.pct_change !== null ? `(${d.pct_change > 0 ? "+" : ""}${d.pct_change.toFixed(1)}%)` : "";
+
+        let deltaCls = "delta-neutral";
+        if (d.improved === true) deltaCls = "delta-improved";
+        else if (d.improved === false) deltaCls = "delta-declined";
+
+        rows += `
+            <tr>
+                <td class="compare-label">${label}</td>
+                <td class="compare-val">${leftVal}</td>
+                <td class="compare-delta ${deltaCls}">${deltaVal} ${pctStr}</td>
+                <td class="compare-val">${rightVal}</td>
+            </tr>`;
+    }
+
+    // Side-by-side dict fields
+    const dictHtml = renderDictComparison("Session Win Rates", c.left_stats.session_win_rates, c.right_stats.session_win_rates);
+    const dailyHtml = renderDictComparison("Daily Win Rates", c.left_stats.daily_win_rates, c.right_stats.daily_win_rates);
+
+    content.innerHTML = `
+        <div class="comparison-view">
+            <div class="comparison-header">
+                <button class="btn btn-sm" onclick="backToList()">Back</button>
+                <h3>Comparison</h3>
+            </div>
+            <div class="section">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>${escHtml(c.left_label)}<br><span class="compare-account">${escHtml(c.left_account_name)}</span></th>
+                            <th>Delta</th>
+                            <th>${escHtml(c.right_label)}<br><span class="compare-account">${escHtml(c.right_account_name)}</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            ${dictHtml}
+            ${dailyHtml}
+        </div>`;
+}
+
+function renderDictComparison(title, leftDict, rightDict) {
+    if ((!leftDict || Object.keys(leftDict).length === 0) && (!rightDict || Object.keys(rightDict).length === 0)) return "";
+    const allKeys = new Set([...Object.keys(leftDict || {}), ...Object.keys(rightDict || {})]);
+    let rows = "";
+    for (const key of allKeys) {
+        const lv = leftDict?.[key] ?? "-";
+        const rv = rightDict?.[key] ?? "-";
+        rows += `<tr><td>${key}</td><td>${typeof lv === "number" ? lv + "%" : lv}</td><td>${typeof rv === "number" ? rv + "%" : rv}</td></tr>`;
+    }
+    return `<div class="section"><h2>${title}</h2>
+        <table><thead><tr><th></th><th>Left</th><th>Right</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+}
+
+function formatDeltaValue(field, val) {
+    if (field.includes("pct") || field.includes("percentage") || field === "win_rate") return val.toFixed(2) + "%";
+    if (field.includes("ratio") || field === "profit_factor") return val.toFixed(2);
+    if (["total_trades", "winning_trades", "losing_trades", "consecutive_wins", "consecutive_losses"].includes(field)) return val.toString();
+    return "$" + val.toFixed(2);
+}
+
+async function compareLiveUI(reportId) {
+    let accountId;
+    try {
+        const accs = await api.getAccounts();
+        const running = accs.filter(a => a.container_status === "running");
+        if (running.length === 0) {
+            alert("No running containers. Start an account's container first.");
+            return;
+        }
+        if (running.length === 1) {
+            accountId = running[0].id;
+        } else {
+            const choices = running.map((a, i) => `${i + 1}. ${a.name}`).join("\n");
+            const pick = prompt(`Choose a running account:\n${choices}\nEnter number:`);
+            if (!pick) return;
+            const idx = parseInt(pick) - 1;
+            if (idx < 0 || idx >= running.length) return;
+            accountId = running[idx].id;
+        }
+    } catch (e) {
+        alert("Failed to fetch accounts: " + e.message);
+        return;
+    }
+
+    const content = document.getElementById("reports-content");
+    content.innerHTML = `<div class="loading"><div class="spinner"></div>Comparing with live stats...</div>`;
+
+    try {
+        const comparison = await api.compareLive(reportId, accountId);
+        renderComparison(comparison);
+    } catch (e) {
+        content.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
+    }
+}
+
+async function deleteReport(id) {
+    if (!confirm("Delete this report?")) return;
+    try {
+        await api.deleteReport(id);
+        selectedIds.delete(id);
+        updateCompareButton();
+        await loadReports();
+    } catch (e) {
+        alert("Failed to delete: " + e.message);
+    }
+}
+
+function backToList() {
+    currentView = "list";
+    selectedIds.clear();
+    updateCompareButton();
+    loadReports();
+}

@@ -4,6 +4,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 ACCOUNTS_FILE = DATA_DIR / "accounts.json"
+REPORTS_FILE = DATA_DIR / "reports.json"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 BRIDGE_INTERNAL_PORT = 8080

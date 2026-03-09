@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from backend.config import FRONTEND_DIR
-from backend.routes import accounts, trades, stats, docker
+from backend.routes import accounts, trades, stats, docker, reports
 from backend.services.docker_service import stop_all_containers
 
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +27,7 @@ app.include_router(accounts.router)
 app.include_router(trades.router)
 app.include_router(stats.router)
 app.include_router(docker.router)
+app.include_router(reports.router)
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
@@ -39,3 +40,8 @@ async def serve_dashboard():
 @app.get("/trades")
 async def serve_trades_page():
     return FileResponse(str(FRONTEND_DIR / "trades.html"))
+
+
+@app.get("/reports")
+async def serve_reports_page():
+    return FileResponse(str(FRONTEND_DIR / "reports.html"))

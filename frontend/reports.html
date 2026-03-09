@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MT5 Demo Stats - Reports</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=6">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <h1>MT5 Stats</h1>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/trades">Trades</a>
+                <a href="/reports" class="active">Reports</a>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="reports-header">
+                <h2>Reports</h2>
+                <div class="reports-header__actions">
+                    <select id="account-filter" class="select-input">
+                        <option value="">All Accounts</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" id="btn-compare" disabled>Compare Selected</button>
+                </div>
+            </div>
+
+            <div id="reports-content">
+                <div class="loading"><div class="spinner"></div>Loading reports...</div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/api.js?v=6"></script>
+    <script src="/static/js/reports.js?v=6"></script>
+</body>
+</html>

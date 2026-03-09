@@ -4,6 +4,7 @@ let dockerReady = false; // true when daemon is running + image is built
 let _dockerCheckTimer = null; // single timer ref to prevent duplicate polling chains
 let _refreshFab = null; // floating refresh button element
 let _refreshing = false; // guard against double-clicks
+let _currentStats = null; // last loaded stats for snapshot scoring
 
 // ---------------------------------------------------------------------------
 // Trading performance benchmarks
@@ -719,6 +720,7 @@ function toggleScoreBreakdown(el) {
 }
 
 function renderStats(s) {
+    _currentStats = s;
     const content = document.getElementById("dashboard-content");
 
     // Build score card (computed client-side from BENCHMARKS)
@@ -756,6 +758,9 @@ function renderStats(s) {
     ].join("");
 
     content.innerHTML = `
+        <div class="snapshot-bar">
+            <button class="btn btn-primary btn-sm" onclick="saveSnapshot()">Save Snapshot</button>
+        </div>
         ${scoreCardHtml}
         <div class="stats-section-header">Performance</div>
         <div class="stats-grid">${performanceCards}</div>
@@ -949,6 +954,42 @@ async function onRefreshClick() {
         _refreshing = false;
         if (_refreshFab) _refreshFab.classList.remove("refresh-fab--loading");
     }
+}
+
+async function saveSnapshot() {
+    if (!selectedAccountId) return;
+    const acc = accounts.find(a => a.id === selectedAccountId);
+    if (!acc) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const label = prompt("Label for this snapshot:", `${acc.name} — ${today}`);
+    if (!label) return;
+
+    const payload = { account_id: selectedAccountId, label };
+    if (_currentStats && _currentStats.total_trades > 0) {
+        const { score, grade } = computeOverallScore(_currentStats);
+        payload.overall_score = score;
+        payload.overall_grade = grade;
+    }
+
+    try {
+        await api.createReport(payload);
+        showToast("Snapshot saved");
+    } catch (e) {
+        alert("Failed to save snapshot: " + e.message);
+    }
+}
+
+function showToast(message) {
+    let toast = document.querySelector(".toast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.className = "toast";
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("visible");
+    setTimeout(() => toast.classList.remove("visible"), 2500);
 }
 
 async function onAddAccount(e) {

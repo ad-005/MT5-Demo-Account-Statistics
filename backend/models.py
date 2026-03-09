@@ -90,3 +90,36 @@ class DockerStatus(BaseModel):
     daemon_running: bool = False
     image_built: bool = False
     message: str = ""
+
+
+class ReportCreate(BaseModel):
+    account_id: str
+    label: str
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    overall_score: Optional[int] = None
+    overall_grade: Optional[str] = None
+
+
+class Report(BaseModel):
+    id: str
+    account_id: str
+    account_name: str
+    label: str
+    created_at: str
+    date_range_start: Optional[str] = None
+    date_range_end: Optional[str] = None
+    trades_count: int = 0
+    overall_score: Optional[int] = None
+    overall_grade: Optional[str] = None
+    stats: TradingStats
+
+
+class StatComparison(BaseModel):
+    left_label: str
+    right_label: str
+    left_account_name: str
+    right_account_name: str
+    left_stats: TradingStats
+    right_stats: TradingStats
+    deltas: dict

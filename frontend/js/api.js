@@ -56,4 +56,12 @@ const api = {
     // Docker
     getDockerStatus: () => api.get("/docker/status"),
     buildImage: () => api.post("/docker/build"),
+
+    // Reports
+    getReports: (params = {}) => api.get("/reports", params),
+    getReport: (id) => api.get(`/reports/${id}`),
+    createReport: (data) => api.post("/reports", data),
+    deleteReport: (id) => api.del(`/reports/${id}`),
+    compareReports: (leftId, rightId) => api.get("/reports/compare", { left_id: leftId, right_id: rightId }),
+    compareLive: (reportId, accountId) => api.get("/reports/compare-live", { report_id: reportId, account_id: accountId }),
 };
