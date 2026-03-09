@@ -1,6 +1,6 @@
 # MT5 Demo Stats
 
-A self-hosted dashboard for tracking MetaTrader 5 demo account trading statistics. Each account runs in its own Docker container, and the app displays performance metrics, risk analysis, session breakdowns, and an overall trading score.
+A self-hosted dashboard for tracking MetaTrader 5 demo account performance. Add your accounts, and the app handles the rest — spinning up containers, pulling trade data, and presenting clear statistics.
 
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue)
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688)
@@ -8,15 +8,15 @@ A self-hosted dashboard for tracking MetaTrader 5 demo account trading statistic
 
 ## Features
 
-- **Multi-account support** — add multiple MT5 demo accounts, each running in an isolated Docker container
-- **On-demand containers** — only the selected account's container runs, saving resources
-- **Overall trading score** — composite grade (A+ through F) based on industry benchmarks from prop firms (FTMO) and institutional standards (CFA/GIPS)
-- **Performance metrics** — net profit, win rate, profit factor, expectancy, Sharpe/Sortino ratios, max drawdown, R:R ratio, consecutive wins/losses
-- **Session analysis** — win rates broken down by trading session (Asian, London, New York, NY PM)
-- **Daily analysis** — win rates by day of the week
+- **Multi-account** — each account runs in its own isolated Docker container, started on demand
+- **Overall score** — composite A+ through F grade based on prop firm and institutional benchmarks
+- **Full stats suite** — win rate, profit factor, Sharpe/Sortino, drawdown, expectancy, R:R, streaks
+- **Session & daily breakdown** — win rates by trading session and day of the week
 - **Symbol breakdown** — per-instrument trade count, win rate, and P&L
-- **Trade filtering** — filter by date range, direction, symbol, and profit range
-- **Cross-platform** — works on macOS (ARM and x86), Windows, and Linux
+- **Trade explorer** — searchable trade history with date, direction, symbol, and profit filters
+- **Reports & snapshots** — save point-in-time snapshots of your stats, view them offline, and compare any two reports side by side with color-coded deltas
+- **Compare with live** — compare a saved snapshot against your current live stats
+- **Cross-platform** — macOS (ARM and Intel), Windows, Linux
 
 ## Prerequisites
 
@@ -27,19 +27,14 @@ A self-hosted dashboard for tracking MetaTrader 5 demo account trading statistic
   - Linux: Docker Engine with [buildx plugin](https://docs.docker.com/build/install-buildx/)
 - A **MetaTrader 5 demo account** (free from any MT5 broker)
 
-> **Apple Silicon (M1/M2/M3/M4):** The app automatically creates a dedicated Colima x86_64 VM profile to run MT5 under Wine via QEMU. No manual setup needed — just have Colima installed (`brew install colima`).
+> **Apple Silicon (M1/M2/M3/M4):** The app automatically sets up a Colima x86_64 VM to run MT5. Just have Colima installed (`brew install colima`).
 
 ## Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/ad-005/MT5-Demo-Account-Statistics.git
 cd MT5-Demo-Account-Statistics
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Start the app
 python run.py
 ```
 
@@ -47,76 +42,16 @@ Open **http://127.0.0.1:8000** in your browser.
 
 ### First-time setup
 
-1. The app will check your Docker environment and show a status banner if anything needs attention
-2. Click **Build Image** if prompted — this builds the MT5 Docker image (one-time, takes approximately 15 minutes)
-3. Click **+ Add Account** and enter your MT5 demo account credentials (login, password, server)
-4. Select the account from the sidebar and click **Start Container**
-5. Wait for the container to initialize (~1-2 min on x86, ~3-4 min on ARM Mac via QEMU)
-6. Once ready, the dashboard will display your trading statistics
+1. The app checks your Docker environment and guides you through any needed setup
+2. Build the MT5 image when prompted (one-time, ~15 minutes)
+3. Add your demo account credentials and start the container
+4. Stats appear once the container initializes (~1-2 min on x86, ~3-4 min on ARM)
 
-## How It Works
+### Saving reports
 
-Each Docker container runs:
-1. **MetaTrader 5** under Wine with a custom MQL5 Expert Advisor (DataExporter)
-2. **Bridge server** (Python/FastAPI) that reads exported data and serves it over HTTP
-
-The EA writes account info and trade history to JSON files inside the Wine filesystem. The bridge server reads these files and exposes them via HTTP. The main app fetches data from the bridge and computes statistics client-side and server-side.
-
-```
-Browser  ←→  FastAPI backend (port 8000)  ←→  Bridge server (port 8100+)  ←→  MT5/Wine
-                    ↓
-              Static frontend
-              (HTML/CSS/JS)
-```
-
-## Project Structure
-
-```
-backend/
-  main.py              — FastAPI app entry point
-  config.py            — Configuration (ports, timeouts, paths)
-  models.py            — Pydantic data models
-  services/
-    account_service.py  — Account CRUD (JSON file storage)
-    docker_service.py   — Container lifecycle, cross-platform Docker handling
-    mt5_bridge_client.py — HTTP client to fetch data from containers
-    stats_service.py    — Statistics calculations
-  routes/
-    accounts.py         — /api/accounts/* endpoints
-    trades.py           — /api/trades/* endpoints
-    stats.py            — /api/stats/* endpoints
-    docker.py           — /api/docker/* endpoints
-bridge/
-  bridge_server.py      — In-container HTTP server
-  mql5/DataExporter.mq5 — MQL5 EA that exports data to JSON
-  Dockerfile            — Container image definition
-  setup_and_run.sh      — Container startup script
-frontend/
-  index.html            — Dashboard page
-  trades.html           — Trades page
-  css/style.css         — Dark theme styles
-  js/api.js             — API client
-  js/dashboard.js       — Dashboard logic and scoring
-  js/trades.js          — Trades page logic
-```
-
-## Overall Score Methodology
-
-The composite trading score is calculated from 7 metrics weighted by importance, informed by prop firm evaluation criteria and institutional risk-adjusted performance standards:
-
-| Metric | Weight | Target | Source |
-|--------|--------|--------|--------|
-| Profit Factor | 20% | >= 1.5 | Industry standard |
-| Max Drawdown % | 20% | <= 10% | FTMO/prop firm cap |
-| Sharpe Ratio | 15% | >= 1.0 | CFA benchmark |
-| Win Rate | 15% | >= 50% | Industry standard |
-| R:R Ratio | 10% | >= 1.5 | Industry consensus |
-| Consistency | 10% | Best trade < 30% of total profit | Prop firm rule |
-| Expectancy | 10% | >= $5/trade | Meaningful threshold |
-
-Additional rules:
-- **Drawdown penalty**: 20% score reduction if max DD exceeds 20%; 50% reduction if over 30%
-- **Low sample warning**: displayed when fewer than 20 trades
+1. With stats loaded on the dashboard, click **Save Snapshot**
+2. Give it a label and it's saved — viewable anytime from the **Reports** page
+3. Select two reports and click **Compare** to see a side-by-side diff with improvement indicators
 
 ## License
 
