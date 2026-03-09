@@ -208,6 +208,16 @@ async def _docker_daemon_running() -> bool:
     return code == 0
 
 
+async def _docker_daemon_ready() -> bool:
+    """Check if Docker daemon is responsive via the Colima socket (ARM Mac).
+
+    Unlike _docker_daemon_running() which uses the default Docker context,
+    this targets the Colima x86_64 profile socket directly.
+    """
+    code, _, _ = await _docker_run("docker", "info", timeout=10)
+    return code == 0
+
+
 async def check_docker_environment() -> DockerStatus:
     if not shutil.which("docker"):
         return DockerStatus(
@@ -225,6 +235,17 @@ async def check_docker_environment() -> DockerStatus:
                 return DockerStatus(
                     docker_available=True,
                     message=x86_msg,
+                )
+            # Colima profile is running, but the Docker daemon inside may
+            # need a moment (especially if just started).  Verify connectivity.
+            if not await _docker_daemon_ready():
+                return DockerStatus(
+                    docker_available=True,
+                    message=(
+                        "Colima x86_64 VM is running but Docker daemon is not "
+                        "responding yet. It may still be starting — try refreshing "
+                        "in a few seconds."
+                    ),
                 )
         elif shutil.which("colima"):
             code, _, _ = await _run("colima", "status")
@@ -265,8 +286,16 @@ async def check_docker_environment() -> DockerStatus:
             message=buildx_msg,
         )
 
-    code, stdout, _ = await _docker_run("docker", "images", "-q", CONTAINER_IMAGE)
-    image_built = code == 0 and len(stdout.strip()) > 0
+    image_built = await _image_exists()
+
+    if not image_built:
+        # Retry once — daemon may have been briefly unresponsive
+        logger.info("Image '%s' not found on first check, retrying...", CONTAINER_IMAGE)
+        await asyncio.sleep(2)
+        image_built = await _image_exists()
+
+    if not image_built:
+        logger.warning("Image '%s' not detected after retry", CONTAINER_IMAGE)
 
     return DockerStatus(
         docker_available=True,
@@ -279,8 +308,13 @@ async def check_docker_environment() -> DockerStatus:
 # --------------- Image ---------------
 
 async def _image_exists() -> bool:
-    code, stdout, _ = await _docker_run("docker", "images", "-q", CONTAINER_IMAGE)
-    return code == 0 and len(stdout.strip()) > 0
+    code, stdout, stderr = await _docker_run("docker", "images", "-q", CONTAINER_IMAGE)
+    exists = code == 0 and len(stdout.strip()) > 0
+    if code != 0:
+        logger.debug(
+            "docker images check failed (exit=%d, stderr=%r)", code, stderr.strip()
+        )
+    return exists
 
 
 async def build_image() -> bool:

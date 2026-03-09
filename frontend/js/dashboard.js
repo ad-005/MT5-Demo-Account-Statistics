@@ -1,5 +1,6 @@
 let selectedAccountId = null;
 let accounts = [];
+let dockerReady = false; // true when daemon is running + image is built
 
 // ---------------------------------------------------------------------------
 // Trading performance benchmarks
@@ -182,12 +183,17 @@ async function checkDocker() {
     try {
         const status = await api.getDockerStatus();
         const banner = document.getElementById("docker-banner");
+        dockerReady = status.docker_available && status.daemon_running && status.image_built;
+
         if (!status.docker_available || !status.daemon_running) {
             banner.className = "docker-banner warning";
             banner.innerHTML = `
                 <span class="message">${status.message}</span>
+                <div class="spinner"></div>
             `;
             banner.style.display = "flex";
+            // Re-check until the daemon is responsive
+            setTimeout(checkDocker, 5000);
         } else if (!status.image_built) {
             banner.className = "docker-banner warning";
             banner.innerHTML = `
@@ -197,6 +203,14 @@ async function checkDocker() {
             banner.style.display = "flex";
         } else {
             banner.style.display = "none";
+        }
+
+        // Re-render account content area to reflect docker readiness change
+        if (selectedAccountId) {
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            if (acc && acc.container_status !== "running") {
+                renderContainerStopped(selectedAccountId);
+            }
         }
     } catch (e) {
         console.error("Docker check failed:", e);
@@ -210,8 +224,11 @@ async function buildImage() {
         const result = await api.buildImage();
         banner.innerHTML = `<span class="message">${result.message}</span>`;
         if (result.status === "ok") {
+            dockerReady = true;
             banner.className = "docker-banner";
             setTimeout(() => banner.style.display = "none", 3000);
+            // Re-render account area so Start Container button appears
+            if (selectedAccountId) renderContainerStopped(selectedAccountId);
         }
     } catch (e) {
         banner.innerHTML = `<span class="message">Build failed: ${e.message}</span>`;
@@ -250,6 +267,31 @@ function renderAccounts() {
     `).join("");
 }
 
+function renderContainerStopped(id) {
+    const content = document.getElementById("dashboard-content");
+    if (!dockerReady) {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>Container Not Running</h3>
+                <p>Waiting for Docker environment to be ready...</p>
+                <button class="btn btn-primary" style="margin-top:16px" disabled
+                    title="Docker daemon is still starting — please wait">
+                    <span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>
+                    Warming Up
+                </button>
+            </div>
+        `;
+    } else {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h3>Container Not Running</h3>
+                <p>Start the container to view statistics.</p>
+                <button class="btn btn-primary" style="margin-top:16px" onclick="startContainer('${id}')">Start Container</button>
+            </div>
+        `;
+    }
+}
+
 async function selectAccount(id) {
     selectedAccountId = id;
     renderAccounts();
@@ -260,13 +302,7 @@ async function selectAccount(id) {
     const content = document.getElementById("dashboard-content");
 
     if (acc.container_status !== "running") {
-        content.innerHTML = `
-            <div class="empty-state">
-                <h3>Container Not Running</h3>
-                <p>Start the container to view statistics.</p>
-                <button class="btn btn-primary" style="margin-top:16px" onclick="startContainer('${id}')">Start Container</button>
-            </div>
-        `;
+        renderContainerStopped(id);
         return;
     }
 
@@ -281,13 +317,22 @@ async function selectAccount(id) {
 }
 
 async function startContainer(id) {
+    // Guard: if Docker isn't ready, show the disabled state instead of attempting
+    if (!dockerReady) {
+        renderContainerStopped(id);
+        return;
+    }
+
     const content = document.getElementById("dashboard-content");
     content.innerHTML = `<div class="loading"><div class="spinner"></div>Starting container...</div>`;
 
     try {
         await api.startContainer(id);
     } catch (e) {
-        content.innerHTML = `<div class="empty-state"><h3>Failed to Start</h3><p>${e.message}</p></div>`;
+        // Start failed — re-check Docker status; if Docker went down, show disabled button
+        dockerReady = false;
+        checkDocker(); // async re-check will update dockerReady and re-render
+        renderContainerStopped(id);
         return;
     }
 
