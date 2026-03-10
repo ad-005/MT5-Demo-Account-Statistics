@@ -1,0 +1,4 @@
+# Ensure shell scripts always have LF line endings, even on Windows checkouts.
+# This prevents "cannot execute: required file not found" errors in Docker
+# containers caused by CRLF (\r\n) breaking the shebang line.
+*.sh text eol=lf

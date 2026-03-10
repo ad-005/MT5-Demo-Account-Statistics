@@ -142,7 +142,7 @@ PREBAKE_EOF
 # Copy remaining app files
 COPY bridge_server.py /app/bridge_server.py
 COPY setup_and_run.sh /app/setup_and_run.sh
-RUN chmod +x /app/setup_and_run.sh
+RUN sed -i 's/\r$//' /app/setup_and_run.sh && chmod +x /app/setup_and_run.sh
 
 EXPOSE 8080
 
