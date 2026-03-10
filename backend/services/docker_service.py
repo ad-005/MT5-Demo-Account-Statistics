@@ -22,8 +22,10 @@ _machine = platform.machine()  # arm64 / x86_64 / AMD64
 
 COLIMA_PROFILE = "mt5"
 
+import subprocess as _subprocess_mod
+
 # Track active SSH tunnel processes so we can clean them up on shutdown.
-_ssh_tunnels: dict[int, asyncio.subprocess.Process] = {}
+_ssh_tunnels: dict[int, _subprocess_mod.Popen] = {}
 
 
 def _is_arm() -> bool:
@@ -51,21 +53,25 @@ _home = str(__import__("pathlib").Path.home())
 
 async def _run(*args: str, timeout: int = 120, env: dict = None) -> tuple[int, str, str]:
     import os
+    import subprocess
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=run_env,
-    )
-    try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return 1, "", "Command timed out"
-    return proc.returncode, stdout.decode(), stderr.decode()
+
+    def _blocking():
+        try:
+            result = subprocess.run(
+                args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=run_env,
+                timeout=timeout,
+            )
+            return result.returncode, result.stdout.decode(), result.stderr.decode()
+        except subprocess.TimeoutExpired:
+            return 1, "", "Command timed out"
+
+    return await asyncio.to_thread(_blocking)
 
 
 async def _docker_run(*args: str, timeout: int = 120) -> tuple[int, str, str]:
@@ -166,21 +172,26 @@ async def _install_buildx() -> bool:
                 return True
             logger.error(f"brew install docker-buildx failed: {stderr}")
     elif _system == "Linux":
-        proc = await asyncio.create_subprocess_shell(
-            "mkdir -p ~/.docker/cli-plugins && "
-            "ARCH=$(uname -m) && "
-            'curl -fsSL "https://github.com/docker/buildx/releases/latest/download/'
-            'buildx-v0.14.0.linux-${ARCH}" '
-            "-o ~/.docker/cli-plugins/docker-buildx && "
-            "chmod +x ~/.docker/cli-plugins/docker-buildx",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-        if proc.returncode == 0:
+        import subprocess
+
+        def _install():
+            return subprocess.run(
+                "mkdir -p ~/.docker/cli-plugins && "
+                "ARCH=$(uname -m) && "
+                'curl -fsSL "https://github.com/docker/buildx/releases/latest/download/'
+                'buildx-v0.14.0.linux-${ARCH}" '
+                "-o ~/.docker/cli-plugins/docker-buildx && "
+                "chmod +x ~/.docker/cli-plugins/docker-buildx",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        result = await asyncio.to_thread(_install)
+        if result.returncode == 0:
             logger.info("Installed docker-buildx via direct download")
             return True
-        logger.error(f"buildx install failed: {stderr.decode()}")
+        logger.error(f"buildx install failed: {result.stderr.decode()}")
     # Windows: buildx ships with Docker Desktop; no auto-install path
     return False
 
@@ -404,15 +415,18 @@ async def ensure_port_forwarded(host_port: int) -> bool:
         return False
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "ssh",
-            "-F", str(ssh_config),
-            "-o", "ExitOnForwardFailure=yes",
-            "-N",
-            "-L", f"{host_port}:localhost:{host_port}",
-            f"lima-colima-{COLIMA_PROFILE}",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
+        import subprocess
+        proc = subprocess.Popen(
+            [
+                "ssh",
+                "-F", str(ssh_config),
+                "-o", "ExitOnForwardFailure=yes",
+                "-N",
+                "-L", f"{host_port}:localhost:{host_port}",
+                f"lima-colima-{COLIMA_PROFILE}",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         _ssh_tunnels[host_port] = proc
 
