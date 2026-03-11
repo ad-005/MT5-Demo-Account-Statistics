@@ -1,5 +1,7 @@
 # MT5 Demo Stats
 
+> **Transparency note:** The idea, architecture, and approach for this project are my own. The implementation was built with the assistance of [Claude Code](https://claude.com/claude-code), Anthropic's AI coding assistant.
+
 A self-hosted dashboard for tracking MetaTrader 5 demo account performance. Add your accounts, and the app handles the rest — spinning up containers, pulling trade data, and presenting clear statistics.
 
 ![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue)

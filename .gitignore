@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 data/accounts.json
+data/reports.json
 .idea/
 .DS_Store
 .claude/
