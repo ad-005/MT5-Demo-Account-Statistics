@@ -460,70 +460,124 @@ function _attachHoverListeners(svgEl, tipEl, stats) {
 // Pan/zoom constants
 const ZOOM_MIN = 0.45, ZOOM_MAX = 3.0;
 
-function _attachPanZoom(svgEl) {
-    const vp = svgEl.getElementById ? svgEl.getElementById("web-viewport")
-                                    : svgEl.querySelector("#web-viewport");
+function _attachPanZoom(svgEl, resetBtn, lockBtn) {
+    const vp = svgEl.querySelector("#web-viewport");
     if (!vp) return;
 
     let scale = 1, tx = 0, ty = 0;
+    let targetScale = 1, targetTx = 0, targetTy = 0;
+    let locked = false;
     let dragging = false, lastX = 0, lastY = 0;
+    let rafId = null;
 
-    function applyTransform() {
-        vp.setAttribute("transform", `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${scale.toFixed(4)})`);
+    // Smooth animation loop — lerps current toward target each frame
+    function animate() {
+        const EASE = 0.18;
+        const ds = targetScale - scale;
+        const dx = targetTx - tx;
+        const dy = targetTy - ty;
+
+        if (Math.abs(ds) > 0.0003 || Math.abs(dx) > 0.05 || Math.abs(dy) > 0.05) {
+            scale += ds * EASE;
+            tx    += dx * EASE;
+            ty    += dy * EASE;
+            vp.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+            rafId = requestAnimationFrame(animate);
+        } else {
+            // Snap to final value and stop
+            scale = targetScale; tx = targetTx; ty = targetTy;
+            vp.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+            rafId = null;
+        }
     }
 
-    // Wheel to zoom, centred on cursor
+    function scheduleAnimate() {
+        if (!rafId) rafId = requestAnimationFrame(animate);
+    }
+
+    function applyInstant() {
+        scale = targetScale; tx = targetTx; ty = targetTy;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        vp.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+    }
+
+    function setLocked(val) {
+        locked = val;
+        lockBtn.classList.toggle("stats-web-btn--active", locked);
+        lockBtn.title = locked ? "Unlock pan & zoom" : "Lock pan & zoom (enable page scroll)";
+        lockBtn.querySelector(".swb-icon").textContent = locked ? "🔒" : "🔓";
+        svgEl.style.cursor = locked ? "default" : "grab";
+    }
+
+    // Wheel → zoom centred on cursor
     svgEl.addEventListener("wheel", e => {
+        if (locked) return; // let the page scroll
         e.preventDefault();
+
         const rect = svgEl.getBoundingClientRect();
-        // Cursor position in SVG viewBox coordinates
         const vbW = 900, vbH = 600;
-        const scaleX = vbW / rect.width, scaleY = vbH / rect.height;
-        const mx = (e.clientX - rect.left) * scaleX;
-        const my = (e.clientY - rect.top)  * scaleY;
+        const sx = vbW / rect.width, sy = vbH / rect.height;
+        const mx = (e.clientX - rect.left) * sx;
+        const my = (e.clientY - rect.top)  * sy;
 
-        const delta = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-        const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, scale * delta));
-        const ratio = newScale / scale;
+        // Accumulate wheel delta smoothly
+        const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+        const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetScale * factor));
+        const ratio = newScale / targetScale;
 
-        // Adjust translation so the point under the cursor stays fixed
-        tx = mx + (tx - mx) * ratio;
-        ty = my + (ty - my) * ratio;
-        scale = newScale;
-        applyTransform();
+        targetTx = mx + (targetTx - mx) * ratio;
+        targetTy = my + (targetTy - my) * ratio;
+        targetScale = newScale;
+        scheduleAnimate();
     }, { passive: false });
 
     // Drag to pan
     svgEl.addEventListener("mousedown", e => {
-        // Only primary button; ignore if clicking a node (let hover fire)
-        if (e.button !== 0) return;
+        if (locked || e.button !== 0) return;
         dragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
         svgEl.style.cursor = "grabbing";
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        // Snap targets to current so drag starts from actual position
+        targetScale = scale; targetTx = tx; targetTy = ty;
     });
 
     window.addEventListener("mousemove", e => {
         if (!dragging) return;
         const rect = svgEl.getBoundingClientRect();
         const vbW = 900, vbH = 600;
-        const scaleX = vbW / rect.width, scaleY = vbH / rect.height;
-        tx += (e.clientX - lastX) * scaleX;
-        ty += (e.clientY - lastY) * scaleY;
+        const sx = vbW / rect.width, sy = vbH / rect.height;
+        targetTx += (e.clientX - lastX) * sx;
+        targetTy += (e.clientY - lastY) * sy;
         lastX = e.clientX;
         lastY = e.clientY;
-        applyTransform();
+        applyInstant(); // pan feels best without interpolation lag
     });
 
     window.addEventListener("mouseup", () => {
+        if (!dragging) return;
         dragging = false;
-        svgEl.style.cursor = "";
+        svgEl.style.cursor = locked ? "default" : "grab";
     });
 
-    // Double-click to reset
+    // Reset button
+    resetBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        targetScale = 1; targetTx = 0; targetTy = 0;
+        scheduleAnimate();
+    });
+
+    // Lock button
+    lockBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        setLocked(!locked);
+    });
+
+    // Double-click also resets (convenience)
     svgEl.addEventListener("dblclick", () => {
-        scale = 1; tx = 0; ty = 0;
-        applyTransform();
+        targetScale = 1; targetTx = 0; targetTy = 0;
+        scheduleAnimate();
     });
 }
 
@@ -543,6 +597,20 @@ function renderStatsWeb(panelEl, stats) {
     const layout = _buildLayout();
     svgEl.innerHTML = _buildSvgString(layout, stats, score, grade);
 
+    // Inject control buttons into panel
+    const controls = document.createElement("div");
+    controls.className = "stats-web-controls";
+    controls.innerHTML = `
+        <button class="stats-web-btn" title="Reset view" aria-label="Reset chart view">
+            <span class="swb-icon">↺</span>
+        </button>
+        <button class="stats-web-btn" title="Lock pan &amp; zoom (enable page scroll)" aria-label="Lock chart">
+            <span class="swb-icon">🔓</span>
+        </button>`;
+    panelEl.appendChild(controls);
+
+    const [resetBtn, lockBtn] = controls.querySelectorAll(".stats-web-btn");
+
     _attachHoverListeners(svgEl, tipEl, stats);
-    _attachPanZoom(svgEl);
+    _attachPanZoom(svgEl, resetBtn, lockBtn);
 }

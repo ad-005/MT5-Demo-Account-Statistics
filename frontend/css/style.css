@@ -2343,6 +2343,48 @@ td.negative {
     flex-wrap: wrap;
 }
 
+/* Chart control buttons — reset & lock, floating over bottom-right of panel */
+.stats-web-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+    z-index: 2;
+}
+
+.stats-web-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    box-shadow: var(--shadow-sm);
+    transition: background var(--transition-fast), box-shadow var(--transition-fast),
+                border-color var(--transition-fast);
+}
+
+.stats-web-btn:hover {
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-md);
+    border-color: var(--border);
+}
+
+.stats-web-btn--active {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+}
+
+.stats-web-btn--active:hover {
+    background: var(--accent-glow);
+}
+
 @media (max-width: 480px) {
     .stats-web-tooltip {
         position: static;
