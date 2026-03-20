@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MT5 Demo Stats - Dashboard</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=6">
+    <link rel="stylesheet" href="/static/css/style.css?v=9">
 </head>
 <body>
     <div class="app">
         <aside class="sidebar">
-            <h1>MT5 Stats</h1>
+            <h1><span class="brand-icon"><span></span><span></span><span></span><span></span><span></span></span>MT5 Stats</h1>
             <nav>
                 <a href="/" class="active">Dashboard</a>
                 <a href="/trades">Trades</a>
@@ -26,6 +26,11 @@
             <div id="docker-banner" class="docker-banner" style="display:none"></div>
             <div id="dashboard-content">
                 <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);margin-bottom:16px;opacity:0.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
                     <h3>Select an Account</h3>
                     <p>Choose an account from the sidebar to view trading statistics.</p>
                 </div>
@@ -70,7 +75,9 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js?v=6"></script>
-    <script src="/static/js/dashboard.js?v=6"></script>
+    <script src="/static/js/api.js?v=9"></script>
+    <script src="/static/js/score-card.js?v=9"></script>
+    <script src="/static/js/stats-web.js?v=9"></script>
+    <script src="/static/js/dashboard.js?v=9"></script>
 </body>
 </html>
