@@ -471,15 +471,113 @@ function _attachHoverListeners(svgEl, tipEl, stats) {
     });
 }
 
-// Pan/zoom constants
-const ZOOM_MIN = 0.45, ZOOM_MAX = 3.0;
+// ---------------------------------------------------------------------------
+// Layout persistence (localStorage)
+// ---------------------------------------------------------------------------
 
-function _attachPanZoom(svgEl, resetBtn, lockBtn) {
+function _storageKey(accountId) { return `swLayout_${accountId}`; }
+
+function _saveLayout(accountId, svgEl, tx, ty, scale) {
+    const vp = svgEl && svgEl.querySelector("#web-viewport");
+    const nodes = {};
+    if (vp) {
+        vp.querySelectorAll(".web-node").forEach(n => {
+            const m = (n.getAttribute("transform") || "").match(/translate\(([^,]+),([^)]+)\)/);
+            if (!m) return;
+            const id = n.dataset.nodeType === "center" ? "center"
+                : n.dataset.nodeType === "category" ? `cat_${n.dataset.category}`
+                : `stat_${n.dataset.category}_${n.dataset.stat}`;
+            nodes[id] = { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+        });
+    }
+    try {
+        localStorage.setItem(_storageKey(accountId), JSON.stringify({
+            nodes,
+            pan: { tx, ty, scale },
+        }));
+    } catch (_) {}
+}
+
+function _loadLayout(accountId) {
+    try { return JSON.parse(localStorage.getItem(_storageKey(accountId))); } catch (_) { return null; }
+}
+
+function _clearLayout(accountId) {
+    try { localStorage.removeItem(_storageKey(accountId)); } catch (_) {}
+}
+
+/** Recompute all connector endpoints from current node transform attributes. */
+function _syncConnectors(svgEl) {
     const vp = svgEl.querySelector("#web-viewport");
     if (!vp) return;
 
-    let scale = 1, tx = 0, ty = 0;
-    let targetScale = 1, targetTx = 0, targetTy = 0;
+    const pos = {};
+    vp.querySelectorAll(".web-node").forEach(n => {
+        const m = (n.getAttribute("transform") || "").match(/translate\(([^,]+),([^)]+)\)/);
+        if (!m) return;
+        const id = n.dataset.nodeType === "center" ? "center"
+            : n.dataset.nodeType === "category" ? `cat_${n.dataset.category}`
+            : `stat_${n.dataset.category}_${n.dataset.stat}`;
+        pos[id] = { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+    });
+
+    vp.querySelectorAll(".web-connector").forEach(l => {
+        const catKey = l.dataset.cat;
+        const statKey = l.dataset.stat;
+        if (!statKey) {
+            const c = pos["center"], cp = pos[`cat_${catKey}`];
+            if (c)  { l.setAttribute("x1", c.x);  l.setAttribute("y1", c.y);  }
+            if (cp) { l.setAttribute("x2", cp.x); l.setAttribute("y2", cp.y); }
+        } else {
+            const cp = pos[`cat_${catKey}`], sp = pos[`stat_${catKey}_${statKey}`];
+            if (cp) { l.setAttribute("x1", cp.x); l.setAttribute("y1", cp.y); }
+            if (sp) { l.setAttribute("x2", sp.x); l.setAttribute("y2", sp.y); }
+        }
+    });
+}
+
+/** Apply saved node positions to the SVG and sync connectors. */
+function _applyNodes(svgEl, savedNodes) {
+    if (!savedNodes) return;
+    const vp = svgEl.querySelector("#web-viewport");
+    if (!vp) return;
+
+    vp.querySelectorAll(".web-node").forEach(n => {
+        const id = n.dataset.nodeType === "center" ? "center"
+            : n.dataset.nodeType === "category" ? `cat_${n.dataset.category}`
+            : `stat_${n.dataset.category}_${n.dataset.stat}`;
+        const p = savedNodes[id];
+        if (p) n.setAttribute("transform", `translate(${p.x.toFixed(1)},${p.y.toFixed(1)})`);
+    });
+
+    _syncConnectors(svgEl);
+}
+
+// Pan/zoom constants
+const ZOOM_MIN = 0.45, ZOOM_MAX = 3.0;
+const VBW = 900, VBH = 660;
+
+// Clamp pan so the graph content never fully leaves the viewport.
+// Content bounding box in SVG space (before transform): x=[150,750], y=[30,630].
+function _clampPan(tx, ty, scale) {
+    const MARGIN = 120; // SVG units that must remain visible
+    return {
+        tx: Math.max(MARGIN - 750 * scale, Math.min(VBW - MARGIN - 150 * scale, tx)),
+        ty: Math.max(MARGIN - 630 * scale, Math.min(VBH - MARGIN - 30  * scale, ty)),
+    };
+}
+
+function _attachPanZoom(svgEl, lockBtn, onLockChange, initialTransform, onSave) {
+    const vp = svgEl.querySelector("#web-viewport");
+    if (!vp) return;
+
+    const initTx = initialTransform?.tx ?? 0;
+    const initTy = initialTransform?.ty ?? 0;
+    const initS  = initialTransform?.scale ?? 1;
+
+    let scale = initS, tx = initTx, ty = initTy;
+    let targetScale = initS, targetTx = initTx, targetTy = initTy;
+    vp.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
     let locked = false;
     let dragging = false, lastX = 0, lastY = 0;
     let rafId = null;
@@ -502,6 +600,7 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
             scale = targetScale; tx = targetTx; ty = targetTy;
             vp.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
             rafId = null;
+            if (onSave) onSave(tx, ty, scale);
         }
     }
 
@@ -519,8 +618,8 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
         locked = val;
         lockBtn.classList.toggle("stats-web-btn--active", locked);
         lockBtn.title = locked ? "Unlock pan & zoom" : "Lock pan & zoom (enable page scroll)";
-        lockBtn.querySelector(".swb-icon").textContent = locked ? "🔒" : "🔓";
         svgEl.style.cursor = locked ? "default" : "grab";
+        if (onLockChange) onLockChange(val);
     }
 
     // Wheel → zoom centred on cursor
@@ -529,8 +628,7 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
         e.preventDefault();
 
         const rect = svgEl.getBoundingClientRect();
-        const vbW = 900, vbH = 600;
-        const sx = vbW / rect.width, sy = vbH / rect.height;
+        const sx = VBW / rect.width, sy = VBH / rect.height;
         const mx = (e.clientX - rect.left) * sx;
         const my = (e.clientY - rect.top)  * sy;
 
@@ -539,8 +637,9 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
         const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetScale * factor));
         const ratio = newScale / targetScale;
 
-        targetTx = mx + (targetTx - mx) * ratio;
-        targetTy = my + (targetTy - my) * ratio;
+        const clamped = _clampPan(mx + (targetTx - mx) * ratio, my + (targetTy - my) * ratio, newScale);
+        targetTx = clamped.tx;
+        targetTy = clamped.ty;
         targetScale = newScale;
         scheduleAnimate();
     }, { passive: false });
@@ -548,6 +647,7 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
     // Drag to pan
     svgEl.addEventListener("mousedown", e => {
         if (locked || e.button !== 0) return;
+        if (e.target.closest(".web-node")) return; // let node-drag handle it
         dragging = true;
         lastX = e.clientX;
         lastY = e.clientY;
@@ -560,10 +660,10 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
     window.addEventListener("mousemove", e => {
         if (!dragging) return;
         const rect = svgEl.getBoundingClientRect();
-        const vbW = 900, vbH = 600;
-        const sx = vbW / rect.width, sy = vbH / rect.height;
-        targetTx += (e.clientX - lastX) * sx;
-        targetTy += (e.clientY - lastY) * sy;
+        const sx = VBW / rect.width, sy = VBH / rect.height;
+        const clamped = _clampPan(targetTx + (e.clientX - lastX) * sx, targetTy + (e.clientY - lastY) * sy, targetScale);
+        targetTx = clamped.tx;
+        targetTy = clamped.ty;
         lastX = e.clientX;
         lastY = e.clientY;
         applyInstant(); // pan feels best without interpolation lag
@@ -573,14 +673,13 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
         if (!dragging) return;
         dragging = false;
         svgEl.style.cursor = locked ? "default" : "grab";
+        if (onSave) onSave(tx, ty, scale);
     });
 
-    // Reset button
-    resetBtn.addEventListener("click", e => {
-        e.stopPropagation();
+    function triggerReset() {
         targetScale = 1; targetTx = 0; targetTy = 0;
         scheduleAnimate();
-    });
+    }
 
     // Lock button
     lockBtn.addEventListener("click", e => {
@@ -588,10 +687,168 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
         setLocked(!locked);
     });
 
-    // Double-click also resets (convenience)
-    svgEl.addEventListener("dblclick", () => {
-        targetScale = 1; targetTx = 0; targetTy = 0;
-        scheduleAnimate();
+    // Start locked by default
+    setLocked(true);
+
+    return { isLocked: () => locked, triggerReset };
+}
+
+function _attachNodeDrag(svgEl, isLockedFn, isActiveFn, onDragEnd) {
+    const vp = svgEl.querySelector("#web-viewport");
+    if (!vp) return;
+
+    let dragNode = null;
+    let dragOffsetX = 0, dragOffsetY = 0;
+    let dragStartLocal = { x: 0, y: 0 };
+    let childNodes = [];
+    let childInitialPositions = [];
+    let moved = false;
+
+    function getVpTransform() {
+        const t = vp.getAttribute("transform") || "";
+        const m = t.match(/translate\(([^,]+),([^)]+)\)\s*scale\(([^)]+)\)/);
+        if (!m) return { tx: 0, ty: 0, s: 1 };
+        return { tx: parseFloat(m[1]), ty: parseFloat(m[2]), s: parseFloat(m[3]) };
+    }
+
+    function screenToLocal(clientX, clientY) {
+        const rect = svgEl.getBoundingClientRect();
+        const svgX = (clientX - rect.left) * (VBW / rect.width);
+        const svgY = (clientY - rect.top)  * (VBH / rect.height);
+        const { tx, ty, s } = getVpTransform();
+        return { x: (svgX - tx) / s, y: (svgY - ty) / s };
+    }
+
+    function getNodePos(node) {
+        const t = node.getAttribute("transform") || "translate(0,0)";
+        const m = t.match(/translate\(([^,]+),([^)]+)\)/);
+        return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 0, y: 0 };
+    }
+
+    function updateConnectors(node, nx, ny) {
+        const type = node.dataset.nodeType;
+        const catKey = node.dataset.category;
+        const statKey = node.dataset.stat;
+
+        if (type === "center") {
+            vp.querySelectorAll(".web-connector[data-cat]:not([data-stat])").forEach(l => {
+                l.setAttribute("x1", nx); l.setAttribute("y1", ny);
+            });
+        } else if (type === "category") {
+            vp.querySelectorAll(`.web-connector[data-cat="${catKey}"]:not([data-stat])`).forEach(l => {
+                l.setAttribute("x2", nx); l.setAttribute("y2", ny);
+            });
+            vp.querySelectorAll(`.web-connector[data-cat="${catKey}"][data-stat]`).forEach(l => {
+                l.setAttribute("x1", nx); l.setAttribute("y1", ny);
+            });
+        } else if (type === "stat") {
+            vp.querySelectorAll(`.web-connector[data-cat="${catKey}"][data-stat="${statKey}"]`).forEach(l => {
+                l.setAttribute("x2", nx); l.setAttribute("y2", ny);
+            });
+        }
+    }
+
+    svgEl.addEventListener("mousedown", e => {
+        if (isLockedFn() || !isActiveFn() || e.button !== 0) return;
+        const node = e.target.closest(".web-node");
+        if (!node) return;
+        e.stopPropagation(); // prevent pan starting
+
+        const pos = screenToLocal(e.clientX, e.clientY);
+        const nodePos = getNodePos(node);
+        dragNode = node;
+        dragOffsetX = nodePos.x - pos.x;
+        dragOffsetY = nodePos.y - pos.y;
+        dragStartLocal = pos;
+        moved = false;
+
+        // If dragging a category node, collect child stat nodes and their initial positions
+        if (node.dataset.nodeType === "category") {
+            const catKey = node.dataset.category;
+            childNodes = [...vp.querySelectorAll(`.web-node--stat[data-category="${catKey}"]`)];
+            childInitialPositions = childNodes.map(cn => getNodePos(cn));
+            childNodes.forEach(cn => vp.appendChild(cn));
+        } else {
+            childNodes = [];
+            childInitialPositions = [];
+        }
+
+        // Bring dragged node to front, always keep center on top
+        vp.appendChild(node);
+        const center = vp.querySelector(".web-node--center");
+        if (center && center !== node) vp.appendChild(center);
+
+        svgEl.classList.add("nodes-dragging");
+    });
+
+    window.addEventListener("mousemove", e => {
+        if (!dragNode) return;
+        moved = true;
+        const pos = screenToLocal(e.clientX, e.clientY);
+        const nx = pos.x + dragOffsetX;
+        const ny = pos.y + dragOffsetY;
+        dragNode.setAttribute("transform", `translate(${nx.toFixed(1)},${ny.toFixed(1)})`);
+        updateConnectors(dragNode, nx, ny);
+
+        // Move children along with category node
+        if (childNodes.length > 0) {
+            const ddx = pos.x - dragStartLocal.x;
+            const ddy = pos.y - dragStartLocal.y;
+            childNodes.forEach((cn, i) => {
+                const cnx = childInitialPositions[i].x + ddx;
+                const cny = childInitialPositions[i].y + ddy;
+                cn.setAttribute("transform", `translate(${cnx.toFixed(1)},${cny.toFixed(1)})`);
+                updateConnectors(cn, cnx, cny);
+            });
+        }
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (!dragNode) return;
+        if (moved) {
+            // Suppress the click event so it doesn't accidentally set lockedNode
+            svgEl.addEventListener("click", e => e.stopImmediatePropagation(), { once: true, capture: true });
+            if (onDragEnd) onDragEnd();
+        }
+        svgEl.classList.remove("nodes-dragging");
+        dragNode = null;
+        moved = false;
+    });
+}
+
+/** Restore all node transforms and connector endpoints to original layout positions. */
+function _resetNodes(svgEl, layout, accountId) {
+    if (accountId) _clearLayout(accountId);
+    const vp = svgEl.querySelector("#web-viewport");
+    if (!vp) return;
+
+    const center = vp.querySelector(".web-node--center");
+    if (center) center.setAttribute("transform", `translate(${CX},${CY})`);
+
+    for (const cat of layout.categories) {
+        const catNode = vp.querySelector(`.web-node--cat[data-category="${cat.key}"]`);
+        if (catNode) catNode.setAttribute("transform", `translate(${cat.x.toFixed(1)},${cat.y.toFixed(1)})`);
+
+        for (const s of cat.stats) {
+            const statNode = vp.querySelector(`.web-node--stat[data-stat="${s.key}"][data-category="${cat.key}"]`);
+            if (statNode) statNode.setAttribute("transform", `translate(${s.x.toFixed(1)},${s.y.toFixed(1)})`);
+        }
+    }
+
+    vp.querySelectorAll(".web-connector").forEach(l => {
+        const catKey = l.dataset.cat;
+        const statKey = l.dataset.stat;
+        const cat = layout.categories.find(c => c.key === catKey);
+        if (!cat) return;
+        if (!statKey) {
+            l.setAttribute("x1", CX);           l.setAttribute("y1", CY);
+            l.setAttribute("x2", cat.x.toFixed(1)); l.setAttribute("y2", cat.y.toFixed(1));
+        } else {
+            const s = cat.stats.find(st => st.key === statKey);
+            if (!s) return;
+            l.setAttribute("x1", cat.x.toFixed(1)); l.setAttribute("y1", cat.y.toFixed(1));
+            l.setAttribute("x2", s.x.toFixed(1));   l.setAttribute("y2", s.y.toFixed(1));
+        }
     });
 }
 
@@ -600,7 +857,7 @@ function _attachPanZoom(svgEl, resetBtn, lockBtn) {
  * @param {HTMLElement} panelEl  — the .stats-web-panel container
  * @param {object}      stats   — raw stats object from API
  */
-function renderStatsWeb(panelEl, stats) {
+function renderStatsWeb(panelEl, stats, accountId) {
     if (!panelEl || !stats) return;
 
     const svgEl = panelEl.querySelector(".stats-web-svg");
@@ -611,15 +868,31 @@ function renderStatsWeb(panelEl, stats) {
     const layout = _buildLayout();
     svgEl.innerHTML = _buildSvgString(layout, stats, score, grade);
 
+    // Restore persisted node positions (if any)
+    const saved = accountId ? _loadLayout(accountId) : null;
+    if (saved?.nodes) _applyNodes(svgEl, saved.nodes);
+
     // Inject control buttons into panel
     const controls = document.createElement("div");
     controls.className = "stats-web-controls";
     controls.innerHTML = `
         <button class="stats-web-btn stats-web-btn--reset" data-tooltip="Reset view" aria-label="Reset chart view">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
-                <path d="M4 10a6 6 0 1 1 1.5 4"/>
-                <polyline points="1 14 4.5 10.5 8 14"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+            </svg>
+        </button>
+        <button class="stats-web-btn stats-web-btn--nodes" data-tooltip="Move nodes" aria-label="Toggle node movement">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+                <line x1="12" y1="2" x2="12" y2="22"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <polyline points="9 5 12 2 15 5"/>
+                <polyline points="9 19 12 22 15 19"/>
+                <polyline points="5 9 2 12 5 15"/>
+                <polyline points="19 9 22 12 19 15"/>
             </svg>
         </button>
         <button class="stats-web-btn stats-web-btn--lock" data-tooltip="Lock pan &amp; zoom" aria-label="Lock chart">
@@ -632,8 +905,70 @@ function renderStatsWeb(panelEl, stats) {
         </button>`;
     panelEl.appendChild(controls);
 
-    const [resetBtn, lockBtn] = controls.querySelectorAll(".stats-web-btn");
+    // Confirm dialog
+    const confirmEl = document.createElement("div");
+    confirmEl.className = "swc-overlay";
+    confirmEl.setAttribute("hidden", "");
+    confirmEl.innerHTML = `
+        <div class="swc-box">
+            <p class="swc-msg">Reset chart view and node positions?</p>
+            <div class="swc-actions">
+                <button class="swc-btn swc-btn--cancel">Cancel</button>
+                <button class="swc-btn swc-btn--ok">Reset</button>
+            </div>
+        </div>`;
+    panelEl.appendChild(confirmEl);
+
+    const resetBtn  = controls.querySelector(".stats-web-btn--reset");
+    const nodesBtn  = controls.querySelector(".stats-web-btn--nodes");
+    const lockBtn   = controls.querySelector(".stats-web-btn--lock");
+
+    let nodesMoveActive = false;
+
+    nodesBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        nodesMoveActive = !nodesMoveActive;
+        nodesBtn.classList.toggle("stats-web-btn--active", nodesMoveActive);
+        svgEl.classList.toggle("nodes-mode", nodesMoveActive);
+    });
+
+    // currentPan is a shared reference updated by _attachPanZoom callbacks
+    const currentPan = { tx: saved?.pan?.tx ?? 0, ty: saved?.pan?.ty ?? 0, scale: saved?.pan?.scale ?? 1 };
+    const saveFn = (tx, ty, scale) => {
+        currentPan.tx = tx; currentPan.ty = ty; currentPan.scale = scale;
+        if (accountId) _saveLayout(accountId, svgEl, tx, ty, scale);
+    };
 
     _attachHoverListeners(svgEl, tipEl, stats);
-    _attachPanZoom(svgEl, resetBtn, lockBtn);
+    const { isLocked, triggerReset } = _attachPanZoom(svgEl, lockBtn, (locked) => {
+        if (locked && nodesMoveActive) {
+            nodesMoveActive = false;
+            nodesBtn.classList.remove("stats-web-btn--active");
+            svgEl.classList.remove("nodes-mode");
+        }
+    }, saved?.pan ?? null, saveFn);
+    _attachNodeDrag(svgEl, isLocked, () => nodesMoveActive,
+        () => { if (accountId) _saveLayout(accountId, svgEl, currentPan.tx, currentPan.ty, currentPan.scale); });
+
+    // Reset button → show confirm dialog
+    resetBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        confirmEl.removeAttribute("hidden");
+        confirmEl.querySelector(".swc-btn--cancel").focus();
+    });
+
+    confirmEl.querySelector(".swc-btn--cancel").addEventListener("click", () => {
+        confirmEl.setAttribute("hidden", "");
+    });
+
+    confirmEl.querySelector(".swc-btn--ok").addEventListener("click", () => {
+        confirmEl.setAttribute("hidden", "");
+        triggerReset();
+        _resetNodes(svgEl, layout, accountId);
+    });
+
+    // Dismiss on backdrop click
+    confirmEl.addEventListener("click", e => {
+        if (e.target === confirmEl) confirmEl.setAttribute("hidden", "");
+    });
 }

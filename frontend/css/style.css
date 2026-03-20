@@ -2223,7 +2223,6 @@ td.negative {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
     position: relative;
-    overflow: hidden;
     margin-bottom: 24px;
     box-shadow: var(--shadow-md);
 }
@@ -2238,6 +2237,14 @@ td.negative {
 
 .web-node {
     cursor: pointer;
+}
+
+.stats-web-svg.nodes-mode .web-node {
+    cursor: grab;
+}
+
+.stats-web-svg.nodes-dragging .web-node {
+    cursor: grabbing !important;
 }
 
 .web-node circle {
@@ -2287,7 +2294,7 @@ td.negative {
 .stats-web-tooltip {
     position: absolute;
     top: 14px;
-    right: 14px;
+    left: 14px;
     width: 200px;
     background: var(--bg-surface);
     border: 1px solid var(--border-light);
@@ -2359,8 +2366,8 @@ td.negative {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -2377,11 +2384,6 @@ td.negative {
     color: var(--text-primary);
 }
 
-.stats-web-btn--reset {
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius);
-}
 
 .stats-web-btn--active {
     background: var(--accent-glow);
@@ -2433,6 +2435,60 @@ td.negative {
 .stats-web-btn:hover::before {
     opacity: 1;
     transform: translateY(0);
+}
+
+/* --- Stats Web Confirm Dialog --- */
+.swc-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 20;
+    backdrop-filter: blur(3px);
+    border-radius: var(--radius-lg);
+}
+.swc-overlay[hidden] { display: none; }
+.swc-box {
+    background: #161B22;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 20px 24px;
+    max-width: 268px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+}
+.swc-msg {
+    color: #E6EDF3;
+    font-size: 13.5px;
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+.swc-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.swc-btn {
+    padding: 6px 15px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.swc-btn:hover { opacity: 0.8; }
+.swc-btn--cancel {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #8B949E;
+}
+.swc-btn--ok {
+    background: #007AFF;
+    color: #fff;
+    font-weight: 500;
 }
 
 @media (max-width: 480px) {

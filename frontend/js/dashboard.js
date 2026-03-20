@@ -438,7 +438,7 @@ function renderStats(s) {
         </div>
     `;
 
-    renderStatsWeb(content.querySelector(".stats-web-panel"), s);
+    renderStatsWeb(content.querySelector(".stats-web-panel"), s, selectedAccountId);
     showRefreshFab();
     showSnapshotFab();
 }
