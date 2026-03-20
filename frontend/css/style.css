@@ -909,6 +909,7 @@ body {
 
 .card-stack {
     position: relative;
+    isolation: isolate;
     width: calc(50% - 10px);
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -927,7 +928,6 @@ body {
     gap: 12px;
     cursor: pointer;
     position: relative;
-    z-index: 4;
     transition:
         border-color var(--transition-smooth),
         box-shadow var(--transition-smooth),
@@ -939,13 +939,18 @@ body {
     min-height: 160px;
 }
 
-.card-stack__header:hover {
-    border-color: var(--border);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
-    transform: translateY(-2px);
+/* When expanded, header needs higher z-index to sit above the cards container */
+.card-stack.expanded .card-stack__header,
+.card-stack.collapsing .card-stack__header {
+    z-index: 4;
 }
 
-/* Expanded header — compact horizontal bar */
+.card-stack__header:hover {
+    transform: translateY(-6px);
+}
+
+/* Expanded/expanding header — compact horizontal bar */
+.card-stack.expanding .card-stack__header,
 .card-stack.expanded .card-stack__header {
     min-height: 0;
     padding: 14px 24px;
@@ -955,6 +960,7 @@ body {
     gap: 16px;
 }
 
+.card-stack.expanding .card-stack__header:hover,
 .card-stack.expanded .card-stack__header:hover {
     transform: none;
 }
@@ -965,9 +971,9 @@ body {
 .card-stack[data-category="ratios"] .card-stack__header { border-top: 3px solid var(--accent); }
 .card-stack[data-category="volume"] .card-stack__header { border-top: 3px solid var(--yellow); }
 
-/* Stacked card peek — diagonal offset like a real card deck */
-.card-stack:not(.expanded):not(.collapsing) .card-stack__header::before,
-.card-stack:not(.expanded):not(.collapsing) .card-stack__header::after {
+/* Stacked card peek — ghost cards always in DOM, faded in/out via opacity */
+.card-stack::before,
+.card-stack::after {
     content: "";
     position: absolute;
     left: 0;
@@ -977,26 +983,34 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
 }
 
-/* First card behind — offset down-right */
-.card-stack:not(.expanded):not(.collapsing) .card-stack__header::before {
-    transform: translate(5px, 6px);
+.card-stack::before {
+    transform: translate(6px, 6px);
     z-index: -1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* Second card behind — further offset down-right */
-.card-stack:not(.expanded):not(.collapsing) .card-stack__header::after {
-    transform: translate(10px, 12px);
+.card-stack::after {
+    transform: translate(12px, 12px);
     z-index: -2;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07), 0 2px 5px rgba(0, 0, 0, 0.04);
+}
+
+/* Visible only when fully collapsed — fade in after FLIP settles */
+.card-stack:not(.expanded):not(.collapsing):not(.expanding)::before {
+    opacity: 0.85;
+}
+
+.card-stack:not(.expanded):not(.collapsing):not(.expanding)::after {
+    opacity: 0.6;
 }
 
 /* Extra space when fully collapsed to accommodate the peek offset */
-.card-stack:not(.expanded):not(.collapsing) {
+.card-stack:not(.expanded):not(.collapsing):not(.expanding) {
     padding-bottom: 14px;
-    padding-right: 10px;
+    padding-right: 14px;
 }
 
 .card-stack__info {
@@ -1007,6 +1021,7 @@ body {
     transition: align-items 0s 0.15s; /* delay layout shift */
 }
 
+.card-stack.expanding .card-stack__info,
 .card-stack.expanded .card-stack__info {
     align-items: flex-start;
 }
@@ -1034,6 +1049,7 @@ body {
     transition: font-size 0.3s ease, padding 0.3s ease;
 }
 
+.card-stack.expanding .card-stack__grade,
 .card-stack.expanded .card-stack__grade {
     font-size: 14px;
     padding: 4px 12px;
@@ -1052,6 +1068,7 @@ body {
     flex-shrink: 0;
 }
 
+.card-stack.expanding .card-stack__chevron,
 .card-stack.expanded .card-stack__chevron {
     transform: rotate(180deg);
 }
@@ -1099,6 +1116,7 @@ body {
 }
 
 /* Both expanded and collapsing states take full width */
+.card-stack.expanding,
 .card-stack.expanded,
 .card-stack.collapsing {
     width: 100%;

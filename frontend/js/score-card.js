@@ -342,7 +342,7 @@ function _flipSiblings(grid, skip) {
             s.style.transition = "none";
             // Force reflow so the starting transform is registered
             s.offsetHeight;
-            s.style.transition = "transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)";
+            s.style.transition = "transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)";
             s.style.transform = "";
         });
 
@@ -360,48 +360,119 @@ function toggleCardStack(el) {
     const cards = el.querySelector(".card-stack__cards");
     if (!cards) return;
 
-    // Prevent interaction during collapse animation
-    if (el.classList.contains("collapsing")) return;
+    // Prevent interaction during any in-progress animation
+    if (el.classList.contains("collapsing") || el.classList.contains("expanding")) return;
 
     const grid = el.closest(".card-stacks-grid");
 
     if (el.classList.contains("expanded")) {
-        // === COLLAPSE ===
-        // Phase 1: stat cards fade out + height collapses (stays full-width)
-        el.classList.add("collapsing");
-        cards.style.height = cards.scrollHeight + "px";
-        cards.offsetHeight;
-
-        setTimeout(() => {
-            cards.style.height = "0";
-        }, 100);
-
-        cards.addEventListener("transitionend", function handler(e) {
-            if (e.target !== cards || e.propertyName !== "height") return;
-            cards.removeEventListener("transitionend", handler);
-
-            // Phase 2: Content hidden — FLIP siblings, then remove classes
-            const play = _flipSiblings(grid, el);
-            el.classList.remove("expanded", "collapsing");
-            cards.style.height = "";
-            el.offsetHeight; // force layout at new state
-            play();
-        });
+        _collapseStack(el, cards, grid);
     } else {
-        // === EXPAND ===
-        const play = _flipSiblings(grid, el);
+        _expandStack(el, cards, grid);
+    }
+}
+
+function _expandStack(el, cards, grid) {
+    // Phase 1: width expands to 100%, header reshapes, siblings FLIP-slide
+    const play = _flipSiblings(grid, el);
+    el.classList.add("expanding");
+    el.offsetHeight; // force layout at new state
+    play();
+
+    // Phase 2: after width transition completes, reveal content
+    setTimeout(() => {
         el.classList.add("expanded");
+        el.classList.remove("expanding");
 
         const targetHeight = cards.scrollHeight;
         cards.style.height = "0";
-        el.offsetHeight; // force layout at new state
-        play(); // animate siblings to new positions
-
+        el.offsetHeight; // force layout
         cards.style.height = targetHeight + "px";
+
         cards.addEventListener("transitionend", function handler(e) {
             if (e.target !== cards || e.propertyName !== "height") return;
             cards.style.height = "auto";
             cards.removeEventListener("transitionend", handler);
         });
-    }
+    }, 400); // matches CSS width transition duration
+}
+
+function _collapseStack(el, cards, grid) {
+    // Phase 1: stat cards fade out, content height collapses
+    el.classList.add("collapsing");
+    cards.style.height = cards.scrollHeight + "px";
+    el.offsetHeight; // force layout before animating
+
+    // Start collapsing after a brief moment so stat card fade-out is visible
+    setTimeout(() => {
+        cards.style.height = "0";
+    }, 50);
+
+    // Phase 2: after content collapses, FLIP siblings then collapse el width
+    cards.addEventListener("transitionend", function handler(e) {
+        if (e.target !== cards || e.propertyName !== "height") return;
+        cards.removeEventListener("transitionend", handler);
+
+        // Capture sibling positions BEFORE layout change (el still at 100%)
+        const stacks = [...grid.querySelectorAll(".card-stack")];
+        const befores = stacks.map(s => s.getBoundingClientRect());
+
+        // Disable el's CSS transition so layout instantly settles at 50%.
+        // Without this, getBoundingClientRect() after class removal reads from
+        // the transition start frame (100%), making before≈after and delta≈0.
+        el.style.transition = "none";
+        el.classList.remove("expanded", "collapsing");
+        cards.style.height = "";
+        el.offsetHeight; // force layout at 50% — now correct "after" positions
+
+        // Compute how much wider el was (typically ~2x for 50%→100%)
+        const elAfterRect = el.getBoundingClientRect();
+        const elIdx = stacks.indexOf(el);
+        const widthRatio = elAfterRect.width > 0 ? befores[elIdx].width / elAfterRect.width : 1;
+
+        // Visually restore el to its "before" width via scaleX — no layout impact.
+        // Layout is already at 50% (correct for FLIP below), but el visually
+        // still appears 100% wide; then we animate it contracting to natural width.
+        const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+        if (widthRatio > 1.01) {
+            el.style.transformOrigin = "left center";
+            el.style.transform = `scaleX(${widthRatio.toFixed(4)})`;
+        }
+
+        // FLIP: compute deltas and apply all starting transforms (no transitions yet)
+        const flips = [];
+        stacks.forEach((s, i) => {
+            if (s === el) return;
+            const after = s.getBoundingClientRect();
+            const dx = befores[i].left - after.left;
+            const dy = befores[i].top - after.top;
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+            s.style.transition = "none";
+            s.style.transform = `translate(${dx}px, ${dy}px)`;
+            flips.push(s);
+        });
+
+        // Single reflow to commit ALL starting states at once (siblings + el scaleX)
+        el.offsetHeight;
+
+        // Animate all siblings from starting position → natural position
+        flips.forEach(s => {
+            s.style.transition = `transform 0.4s ${EASE}`;
+            s.style.transform = "";
+        });
+
+        // Animate el's scaleX from widthRatio → 1 (simultaneous with sibling FLIP)
+        if (widthRatio > 1.01) {
+            el.style.transition = `transform 0.4s ${EASE}`;
+            el.style.transform = ""; // animate to natural (scaleX 1)
+        }
+
+        // Clean up all inline overrides after animation settles
+        setTimeout(() => {
+            el.style.transition = "";
+            el.style.transform = "";
+            el.style.transformOrigin = "";
+            stacks.forEach(s => { s.style.transition = ""; s.style.transform = ""; });
+        }, 450);
+    });
 }
