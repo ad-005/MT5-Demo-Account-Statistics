@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MT5 Demo Stats - Reports</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=8">
+    <link rel="stylesheet" href="/static/css/style.css?v=10">
 </head>
 <body>
     <div class="app">
@@ -15,6 +15,11 @@
                 <a href="/trades">Trades</a>
                 <a href="/reports" class="active">Reports</a>
             </nav>
+            <div class="account-list">
+                <h3>Accounts</h3>
+                <div id="account-list"></div>
+                <button class="btn-add-account" id="btn-add">+ Add Account</button>
+            </div>
         </aside>
 
         <main class="main">
@@ -34,8 +39,46 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=8"></script>
-    <script src="/static/js/score-card.js?v=8"></script>
-    <script src="/static/js/reports.js?v=8"></script>
+    <!-- Add Account Modal -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <h2>Add Account</h2>
+            <form id="account-form">
+                <div class="form-group">
+                    <label for="name">Display Name</label>
+                    <input type="text" name="name" id="name" required placeholder="My Demo Account">
+                </div>
+                <div class="form-group">
+                    <label for="login">Login (Account Number)</label>
+                    <input type="number" name="login" id="login" required placeholder="12345678">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" name="password" id="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="server">Server</label>
+                    <input type="text" name="server" id="server" required placeholder="MetaQuotes-Demo">
+                </div>
+                <div class="form-group">
+                    <label for="trade_mode">Account Type</label>
+                    <select name="trade_mode" id="trade_mode">
+                        <option value="demo">Demo</option>
+                        <option value="contest">Contest</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" id="modal-cancel">Cancel</button>
+                    <button type="button" class="btn" id="modal-close" style="display:none"></button>
+                    <button type="submit" class="btn btn-primary">Add Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js?v=10"></script>
+    <script src="/static/js/sidebar.js?v=11"></script>
+    <script src="/static/js/score-card.js?v=10"></script>
+    <script src="/static/js/reports.js?v=11"></script>
 </body>
 </html>

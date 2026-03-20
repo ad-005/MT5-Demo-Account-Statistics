@@ -2148,6 +2148,104 @@ td.negative {
     font-weight: 700;
 }
 
+/* Improvement Grade Card */
+
+.comparison-improvement-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    margin-bottom: 18px;
+    border-left-width: 4px;
+}
+
+.cic--green  { border-left-color: var(--green); }
+.cic--yellow { border-left-color: var(--yellow); }
+.cic--red    { border-left-color: var(--red); }
+
+.cic__grade {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    min-width: 36px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.cic--green  .cic__grade { color: var(--green); }
+.cic--yellow .cic__grade { color: var(--yellow); }
+.cic--red    .cic__grade { color: var(--red); }
+
+.cic__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.cic__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.cic__label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cic__scores {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cic__score-val {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+}
+
+.cic__score-val--right {
+    color: var(--text-primary);
+}
+.cic--green  .cic__score-val--right { color: var(--green); }
+.cic--yellow .cic__score-val--right { color: var(--yellow); }
+.cic--red    .cic__score-val--right { color: var(--red); }
+
+.cic__score-grade {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0;
+}
+
+.cic__arrow {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.cic__delta {
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 2px 7px;
+    border-radius: 5px;
+}
+
+.cic__delta--up   { color: var(--green);  background: var(--green-dim); }
+.cic__delta--down { color: var(--red);    background: var(--red-dim); }
+.cic__delta--flat { color: var(--text-muted); background: var(--bg-surface); }
+
 .comparison-table {
     width: 100%;
 }
@@ -2193,6 +2291,99 @@ td.negative {
 .delta-improved { color: var(--green); }
 .delta-declined { color: var(--red); }
 .delta-neutral { color: var(--text-muted); }
+
+.compare-show-more {
+    display: block;
+    width: 100%;
+    margin-top: 2px;
+    padding: 9px 0;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--border-light);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: background var(--transition-fast);
+    border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.compare-show-more:hover {
+    background: var(--accent-glow);
+}
+
+.compare-color-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* Radar Chart */
+
+.radar-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+}
+
+.radar-section h2 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.radar-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.radar-svg {
+    width: 100%;
+    max-width: 380px;
+    height: auto;
+    display: block;
+}
+
+.radar-label {
+    font-size: 11px;
+    fill: var(--text-secondary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+.radar-legend {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.radar-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.radar-legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
 
 @media (max-width: 768px) {
     .reports-header {

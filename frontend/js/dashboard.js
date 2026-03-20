@@ -13,14 +13,24 @@ let _currentStats = null; // last loaded stats for snapshot scoring
 // STAT_CATEGORIES and STAT_TOOLTIPS removed — replaced by Signal Graph (stats-web.js)
 
 document.addEventListener("DOMContentLoaded", () => {
+    initSidebar();
     checkDocker();
     loadAccounts();
 
-    document.getElementById("btn-add").addEventListener("click", openModal);
-    document.getElementById("modal-close").addEventListener("click", closeModal);
-    document.getElementById("modal-cancel").addEventListener("click", closeModal);
-    document.getElementById("account-form").addEventListener("submit", onAddAccount);
-
+    document.addEventListener("sidebar:accountclick", e => selectAccount(e.detail.id));
+    document.addEventListener("sidebar:accountremoved", e => {
+        accounts = window.sidebarAccounts;
+        if (selectedAccountId === e.detail.id) {
+            selectedAccountId = null;
+            hideRefreshFab();
+            document.getElementById("dashboard-content").innerHTML = `
+                <div class="empty-state"><h3>Select an Account</h3><p>Choose an account from the sidebar to view statistics.</p></div>
+            `;
+        }
+    });
+    document.addEventListener("sidebar:accountadded", () => {
+        accounts = window.sidebarAccounts;
+    });
 });
 
 function scheduleDockerCheck(delayMs) {
@@ -224,34 +234,9 @@ async function buildImage() {
 }
 
 async function loadAccounts() {
-    try {
-        accounts = await api.getAccounts();
-        renderAccounts();
-    } catch (e) {
-        console.error("Failed to load accounts:", e);
-    }
-}
-
-function renderAccounts() {
-    const list = document.getElementById("account-list");
-    if (accounts.length === 0) {
-        list.innerHTML = "<p style='color: var(--text-muted); font-size: 13px; padding: 8px 12px;'>No accounts added yet.</p>";
-        return;
-    }
-
-    list.innerHTML = accounts.map(acc => `
-        <div class="account-item ${acc.id === selectedAccountId ? 'selected' : ''}"
-             onclick="selectAccount('${acc.id}')">
-            <div class="info">
-                <span class="name">${acc.name}</span>
-                <span class="login">${acc.login} - ${acc.server}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-                <span class="status-dot ${acc.container_status === 'running' ? 'running' : 'stopped'}"></span>
-                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();removeAccount('${acc.id}')">x</button>
-            </div>
-        </div>
-    `).join("");
+    await loadSidebarAccounts();
+    accounts = window.sidebarAccounts;
+    renderSidebarAccounts(selectedAccountId);
 }
 
 function renderContainerStopped(id) {
@@ -282,7 +267,7 @@ function renderContainerStopped(id) {
 
 async function selectAccount(id) {
     selectedAccountId = id;
-    renderAccounts();
+    renderSidebarAccounts(selectedAccountId);
 
     const acc = accounts.find(a => a.id === id);
     if (!acc) return;
@@ -369,22 +354,6 @@ async function startContainer(id) {
     await loadAccounts();
 }
 
-async function removeAccount(id) {
-    if (!confirm("Remove this account? The container will be stopped.")) return;
-    try {
-        await api.deleteAccount(id);
-        if (selectedAccountId === id) {
-            selectedAccountId = null;
-            hideRefreshFab();
-            document.getElementById("dashboard-content").innerHTML = `
-                <div class="empty-state"><h3>Select an Account</h3><p>Choose an account from the sidebar to view statistics.</p></div>
-            `;
-        }
-        await loadAccounts();
-    } catch (e) {
-        alert("Failed to remove: " + e.message);
-    }
-}
 
 function renderStats(s) {
     _currentStats = s;
@@ -464,15 +433,6 @@ async function stopContainerUI(id) {
     } catch (e) {
         alert("Failed to stop: " + e.message);
     }
-}
-
-function openModal() {
-    document.getElementById("modal-overlay").classList.add("active");
-}
-
-function closeModal() {
-    document.getElementById("modal-overlay").classList.remove("active");
-    document.getElementById("account-form").reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -604,21 +564,3 @@ function showToast(message) {
     setTimeout(() => toast.classList.remove("visible"), 2500);
 }
 
-async function onAddAccount(e) {
-    e.preventDefault();
-    const form = e.target;
-    const data = {
-        name: form.name.value,
-        login: parseInt(form.login.value),
-        password: form.password.value,
-        server: form.server.value,
-        trade_mode: form.trade_mode.value,
-    };
-    try {
-        await api.createAccount(data);
-        closeModal();
-        await loadAccounts();
-    } catch (err) {
-        alert("Failed to add account: " + err.message);
-    }
-}

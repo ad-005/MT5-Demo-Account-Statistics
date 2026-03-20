@@ -3,9 +3,20 @@ let selectedIds = new Set();
 let currentView = "list"; // "list" | "detail" | "compare"
 
 document.addEventListener("DOMContentLoaded", () => {
-    loadReports();
+    initSidebar();
     document.getElementById("account-filter").addEventListener("change", onFilterChange);
     document.getElementById("btn-compare").addEventListener("click", onCompareClick);
+
+    document.addEventListener("sidebar:loaded", () => {
+        renderSidebarAccounts();
+    });
+    document.addEventListener("sidebar:accountclick", e => {
+        const filter = document.getElementById("account-filter");
+        filter.value = e.detail.id;
+        onFilterChange();
+    });
+
+    loadSidebarAccounts().then(() => loadReports());
 });
 
 async function loadReports() {
@@ -13,7 +24,7 @@ async function loadReports() {
         const filter = document.getElementById("account-filter").value;
         const params = filter ? { account_id: filter } : {};
         reports = await api.getReports(params);
-        await populateAccountFilter();
+        populateAccountFilter();
         renderReportList();
     } catch (e) {
         document.getElementById("reports-content").innerHTML =
@@ -21,23 +32,16 @@ async function loadReports() {
     }
 }
 
-async function populateAccountFilter() {
+function populateAccountFilter() {
     const select = document.getElementById("account-filter");
     const current = select.value;
-    // Gather unique accounts from reports
     const seen = new Map();
     reports.forEach(r => {
         if (!seen.has(r.account_id)) seen.set(r.account_id, r.account_name);
     });
-
-    // Also try to fetch live accounts
-    try {
-        const accs = await api.getAccounts();
-        accs.forEach(a => {
-            if (!seen.has(a.id)) seen.set(a.id, a.name);
-        });
-    } catch (_) {}
-
+    (window.sidebarAccounts || []).forEach(a => {
+        if (!seen.has(a.id)) seen.set(a.id, a.name);
+    });
     const opts = [`<option value="">All Accounts</option>`];
     seen.forEach((name, id) => {
         opts.push(`<option value="${id}" ${id === current ? "selected" : ""}>${name}</option>`);
@@ -279,6 +283,59 @@ function renderSymbolBreakdown(s) {
         <tbody>${rows}</tbody></table></div>`;
 }
 
+// ---------------------------------------------------------------------------
+// Improvement grade — based on percentage-point delta of the overall score
+// (0–100 scale). Percentage points are the standard unit for expressing
+// absolute change on a bounded score scale.
+// ---------------------------------------------------------------------------
+
+function computeImprovementGrade(leftStats, rightStats) {
+    if (!leftStats || !rightStats) return null;
+    if ((leftStats.total_trades ?? 0) === 0 && (rightStats.total_trades ?? 0) === 0) return null;
+    const left = computeOverallScore(leftStats);
+    const right = computeOverallScore(rightStats);
+    const delta = right.score - left.score; // pp = percentage points
+
+    // Grade thresholds based on pp change
+    let grade, label, colorCls;
+    if (delta >= 20)      { grade = "A+"; label = "Major improvement";    colorCls = "cic--green";  }
+    else if (delta >= 12) { grade = "A";  label = "Strong improvement";   colorCls = "cic--green";  }
+    else if (delta >= 6)  { grade = "B+"; label = "Solid improvement";    colorCls = "cic--green";  }
+    else if (delta >= 2)  { grade = "B";  label = "Modest improvement";   colorCls = "cic--yellow"; }
+    else if (delta > -2)  { grade = "C+"; label = delta === 0 ? "No change" : "No significant change"; colorCls = "cic--yellow"; }
+    else if (delta > -6)  { grade = "C";  label = "Modest decline";       colorCls = "cic--yellow"; }
+    else if (delta > -12) { grade = "D";  label = "Notable decline";      colorCls = "cic--red";    }
+    else                  { grade = "F";  label = "Major decline";        colorCls = "cic--red";    }
+
+    return { leftScore: left.score, leftGrade: left.grade, rightScore: right.score, rightGrade: right.grade, delta, grade, label, colorCls };
+}
+
+function renderImprovementCard(c) {
+    const ig = computeImprovementGrade(c.left_stats, c.right_stats);
+    if (!ig) return "";
+
+    const sign = ig.delta > 0 ? "+" : "";
+    const deltaStr = `${sign}${ig.delta} pp`;
+    const deltaCls = ig.delta >= 2 ? "cic__delta--up" : ig.delta <= -2 ? "cic__delta--down" : "cic__delta--flat";
+
+    return `
+        <div class="comparison-improvement-card ${ig.colorCls}">
+            <div class="cic__grade">${ig.grade}</div>
+            <div class="cic__body">
+                <div class="cic__title">Overall Improvement</div>
+                <div class="cic__label">${ig.label}</div>
+            </div>
+            <div class="cic__scores">
+                <span class="cic__score-val">${ig.leftScore}<span class="cic__score-grade">${ig.leftGrade}</span></span>
+                <svg class="cic__arrow" viewBox="0 0 24 12" fill="none" width="28" height="14">
+                    <path d="M0 6h20M15 1l5 5-5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="cic__score-val cic__score-val--right">${ig.rightScore}<span class="cic__score-grade">${ig.rightGrade}</span></span>
+                <span class="cic__delta ${deltaCls}">${deltaStr}</span>
+            </div>
+        </div>`;
+}
+
 function renderComparison(c) {
     currentView = "compare";
     const content = document.getElementById("reports-content");
@@ -309,7 +366,7 @@ function renderComparison(c) {
         sell_percentage: "Sell %",
     };
 
-    let rows = "";
+    const allRows = [];
     for (const [field, d] of Object.entries(c.deltas)) {
         const label = DISPLAY_LABELS[field] || field;
         const leftVal = formatDeltaValue(field, d.left);
@@ -321,18 +378,32 @@ function renderComparison(c) {
         if (d.improved === true) deltaCls = "delta-improved";
         else if (d.improved === false) deltaCls = "delta-declined";
 
-        rows += `
+        allRows.push(`
             <tr>
                 <td class="compare-label">${label}</td>
                 <td class="compare-val">${leftVal}</td>
                 <td class="compare-delta ${deltaCls}">${deltaVal} ${pctStr}</td>
                 <td class="compare-val">${rightVal}</td>
-            </tr>`;
+            </tr>`);
     }
 
+    const VISIBLE_ROWS = 3;
+    const visibleRows = allRows.slice(0, VISIBLE_ROWS).join("");
+    const hiddenRows = allRows.slice(VISIBLE_ROWS).join("");
+    const hasMore = hiddenRows.length > 0;
+    const remainingCount = allRows.length - VISIBLE_ROWS;
+
+    const extraTbody = hasMore
+        ? `<tbody class="compare-extra" id="compare-extra-rows" hidden>${hiddenRows}</tbody>`
+        : "";
+
     // Side-by-side dict fields
-    const dictHtml = renderDictComparison("Session Win Rates", c.left_stats.session_win_rates, c.right_stats.session_win_rates);
-    const dailyHtml = renderDictComparison("Daily Win Rates", c.left_stats.daily_win_rates, c.right_stats.daily_win_rates);
+    const leftName = c.left_account_name || c.left_label;
+    const rightName = c.right_account_name || c.right_label;
+    const dictHtml = renderDictComparison("Session Win Rates", c.left_stats.session_win_rates, c.right_stats.session_win_rates, leftName, rightName);
+    const dailyHtml = renderDictComparison("Daily Win Rates", c.left_stats.daily_win_rates, c.right_stats.daily_win_rates, leftName, rightName);
+    const radarHtml = renderRadarChart(c.left_stats, c.right_stats, c.left_label, c.right_label);
+    const improvementHtml = renderImprovementCard(c);
 
     content.innerHTML = `
         <div class="comparison-view">
@@ -342,25 +413,29 @@ function renderComparison(c) {
             <div class="comparison-header">
                 <h3>Comparison</h3>
             </div>
+            ${improvementHtml}
+            ${radarHtml}
             <div class="section">
                 <table class="comparison-table">
                     <thead>
                         <tr>
                             <th>Metric</th>
-                            <th>${escHtml(c.left_label)}<br><span class="compare-account">${escHtml(c.left_account_name)}</span></th>
+                            <th><span class="compare-color-dot" style="background:#007AFF"></span>${escHtml(c.left_label)}<br><span class="compare-account">${escHtml(c.left_account_name)}</span></th>
                             <th>Delta</th>
-                            <th>${escHtml(c.right_label)}<br><span class="compare-account">${escHtml(c.right_account_name)}</span></th>
+                            <th><span class="compare-color-dot" style="background:#FF9500"></span>${escHtml(c.right_label)}<br><span class="compare-account">${escHtml(c.right_account_name)}</span></th>
                         </tr>
                     </thead>
-                    <tbody>${rows}</tbody>
+                    <tbody>${visibleRows}</tbody>
+                    ${extraTbody}
                 </table>
+                ${hasMore ? `<button class="compare-show-more" onclick="toggleCompareRows(this)" data-count="${remainingCount}">Show ${remainingCount} more rows</button>` : ""}
             </div>
             ${dictHtml}
             ${dailyHtml}
         </div>`;
 }
 
-function renderDictComparison(title, leftDict, rightDict) {
+function renderDictComparison(title, leftDict, rightDict, leftName = "Left", rightName = "Right") {
     if ((!leftDict || Object.keys(leftDict).length === 0) && (!rightDict || Object.keys(rightDict).length === 0)) return "";
     const allKeys = new Set([...Object.keys(leftDict || {}), ...Object.keys(rightDict || {})]);
     let rows = "";
@@ -370,7 +445,7 @@ function renderDictComparison(title, leftDict, rightDict) {
         rows += `<tr><td>${key}</td><td>${typeof lv === "number" ? lv + "%" : lv}</td><td>${typeof rv === "number" ? rv + "%" : rv}</td></tr>`;
     }
     return `<div class="section"><h2>${title}</h2>
-        <table><thead><tr><th></th><th>Left</th><th>Right</th></tr></thead>
+        <table><thead><tr><th></th><th>${escHtml(leftName)}</th><th>${escHtml(rightName)}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -428,9 +503,136 @@ async function deleteReport(id) {
     }
 }
 
+function toggleCompareRows(btn) {
+    const extra = document.getElementById("compare-extra-rows");
+    if (!extra) return;
+    const expanded = !extra.hidden;
+    extra.hidden = expanded;
+    const count = btn.dataset.count;
+    btn.textContent = expanded ? `Show ${count} more rows` : "Show fewer rows";
+}
+
 function backToList() {
     currentView = "list";
     selectedIds.clear();
     updateCompareButton();
     loadReports();
+}
+
+// ---------------------------------------------------------------------------
+// Radar chart — pure SVG, uses BENCHMARKS scoring from score-card.js
+// ---------------------------------------------------------------------------
+
+const RADAR_METRICS = [
+    { key: "win_rate",         label: "Win Rate" },
+    { key: "profit_factor",    label: "Profit Factor" },
+    { key: "sharpe_ratio",     label: "Sharpe" },
+    { key: "max_drawdown_pct", label: "Low DD" },
+    { key: "risk_reward_ratio",label: "R:R" },
+    { key: "expectancy",       label: "Expectancy" },
+];
+
+function radarNormalize(key, value) {
+    const bench = BENCHMARKS[key];
+    if (!bench) return 0;
+    let subScore;
+    if (bench.higher) {
+        const ratio = value / bench.target;
+        if (ratio >= 2) subScore = 100;
+        else if (ratio >= 1) subScore = 70 + (ratio - 1) * 30;
+        else subScore = Math.max(0, ratio * 70);
+    } else {
+        if (value <= 0) subScore = 100;
+        else if (value <= bench.target) subScore = 70 + ((bench.target - value) / bench.target) * 30;
+        else subScore = Math.max(0, 70 - ((value - bench.target) / (bench.target * 2)) * 70);
+    }
+    return Math.max(0, Math.min(100, subScore)) / 100;
+}
+
+function renderRadarChart(leftStats, rightStats, leftLabel, rightLabel) {
+    const n = RADAR_METRICS.length;
+    const cx = 200, cy = 195, r = 130;
+    const levels = 4;
+    const LEFT_COLOR = "#007AFF";
+    const RIGHT_COLOR = "#FF9500";
+
+    function angleFor(i) {
+        return (Math.PI * 2 * i / n) - Math.PI / 2;
+    }
+
+    function getPoints(stats) {
+        return RADAR_METRICS.map((m, i) => {
+            const norm = radarNormalize(m.key, stats[m.key] ?? 0);
+            const angle = angleFor(i);
+            return { x: cx + norm * r * Math.cos(angle), y: cy + norm * r * Math.sin(angle) };
+        });
+    }
+
+    function ptsStr(pts) {
+        return pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    }
+
+    // Grid polygon levels
+    let grid = "";
+    for (let l = 1; l <= levels; l++) {
+        const fr = (r * l) / levels;
+        const pts = RADAR_METRICS.map((_, i) => {
+            const a = angleFor(i);
+            return `${(cx + fr * Math.cos(a)).toFixed(1)},${(cy + fr * Math.sin(a)).toFixed(1)}`;
+        }).join(" ");
+        grid += `<polygon points="${pts}" fill="none" stroke="#D2D2D7" stroke-width="${l === levels ? 1.5 : 0.75}"/>`;
+    }
+
+    // Axis lines + labels
+    let axes = "";
+    let labels = "";
+    RADAR_METRICS.forEach((m, i) => {
+        const a = angleFor(i);
+        const ex = (cx + r * Math.cos(a)).toFixed(1);
+        const ey = (cy + r * Math.sin(a)).toFixed(1);
+        axes += `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="#D2D2D7" stroke-width="1"/>`;
+
+        const lx = cx + (r + 24) * Math.cos(a);
+        const ly = cy + (r + 24) * Math.sin(a);
+        let anchor = "middle";
+        const cosA = Math.cos(a);
+        if (cosA > 0.25) anchor = "start";
+        else if (cosA < -0.25) anchor = "end";
+        labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="central" class="radar-label">${m.label}</text>`;
+    });
+
+    // Data polygons
+    const leftPts = getPoints(leftStats);
+    const rightPts = getPoints(rightStats);
+
+    const leftDots = leftPts.map(p =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${LEFT_COLOR}"/>`).join("");
+    const rightDots = rightPts.map(p =>
+        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${RIGHT_COLOR}"/>`).join("");
+
+    return `
+        <div class="radar-section">
+            <h2>Radar Comparison</h2>
+            <div class="radar-wrap">
+                <svg viewBox="0 0 400 390" class="radar-svg" aria-label="Radar comparison chart">
+                    ${grid}
+                    ${axes}
+                    <polygon points="${ptsStr(rightPts)}" fill="${RIGHT_COLOR}" fill-opacity="0.18" stroke="${RIGHT_COLOR}" stroke-width="2" stroke-linejoin="round"/>
+                    <polygon points="${ptsStr(leftPts)}" fill="${LEFT_COLOR}" fill-opacity="0.18" stroke="${LEFT_COLOR}" stroke-width="2" stroke-linejoin="round"/>
+                    ${rightDots}
+                    ${leftDots}
+                    ${labels}
+                </svg>
+                <div class="radar-legend">
+                    <div class="radar-legend-item">
+                        <span class="radar-legend-swatch" style="background:${LEFT_COLOR}"></span>
+                        <span>${escHtml(leftLabel)}</span>
+                    </div>
+                    <div class="radar-legend-item">
+                        <span class="radar-legend-swatch" style="background:${RIGHT_COLOR}"></span>
+                        <span>${escHtml(rightLabel)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
 }

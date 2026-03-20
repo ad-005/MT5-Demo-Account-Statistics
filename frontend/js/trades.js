@@ -3,25 +3,54 @@ let accounts = [];
 let allTrades = [];
 
 document.addEventListener("DOMContentLoaded", () => {
-    loadAccounts();
+    initSidebar();
+    document.getElementById("account-select").addEventListener("change", onAccountChange);
     document.getElementById("filter-form").addEventListener("submit", onFilter);
     document.getElementById("btn-reset").addEventListener("click", onReset);
+
+    document.addEventListener("sidebar:loaded", () => {
+        accounts = window.sidebarAccounts || [];
+        _populateAccountSelect();
+        renderSidebarAccounts(selectedAccountId);
+    });
+    document.addEventListener("sidebar:accountclick", e => {
+        const select = document.getElementById("account-select");
+        select.value = e.detail.id;
+        select.dispatchEvent(new Event("change"));
+    });
+    document.addEventListener("sidebar:accountremoved", e => {
+        if (selectedAccountId === e.detail.id) {
+            selectedAccountId = null;
+            document.getElementById("trades-content").innerHTML = `
+                <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);margin-bottom:16px;opacity:0.5">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    <h3>Select an Account</h3>
+                    <p>Choose an account above to view and filter trades.</p>
+                </div>`;
+        }
+        _populateAccountSelect();
+    });
+
+    loadAccounts();
 });
 
+function _populateAccountSelect() {
+    const select = document.getElementById("account-select");
+    const current = select.value;
+    select.innerHTML = '<option value="">-- Select Account --</option>' +
+        (window.sidebarAccounts || []).map(a => `<option value="${a.id}">${a.name} (${a.login})</option>`).join("");
+    if (current && (window.sidebarAccounts || []).some(a => a.id === current)) select.value = current;
+}
+
 async function loadAccounts() {
-    try {
-        accounts = await api.getAccounts();
-        const select = document.getElementById("account-select");
-        select.innerHTML = '<option value="">-- Select Account --</option>' +
-            accounts.map(a => `<option value="${a.id}">${a.name} (${a.login})</option>`).join("");
-        select.addEventListener("change", onAccountChange);
-    } catch (e) {
-        console.error("Failed to load accounts:", e);
-    }
+    await loadSidebarAccounts();
 }
 
 async function onAccountChange(e) {
     selectedAccountId = e.target.value;
+    renderSidebarAccounts(selectedAccountId);
     if (!selectedAccountId) return;
 
     const acc = accounts.find(a => a.id === selectedAccountId);
