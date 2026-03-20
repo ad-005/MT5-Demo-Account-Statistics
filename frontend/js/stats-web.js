@@ -183,16 +183,16 @@ function _buildLayout() {
 function _buildDefs() {
     const allFilters = STAT_GRAPH_CONFIG.map(cat => `
         <filter id="${cat.filterId}" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="blur"/>
-            <feFlood flood-color="${cat.glowColor}" flood-opacity="0.55" result="color"/>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur"/>
+            <feFlood flood-color="${cat.glowColor}" flood-opacity="0.30" result="color"/>
             <feComposite in="color" in2="blur" operator="in" result="glow"/>
             <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>`).join("");
 
     const centerFilter = `
         <filter id="glow-center" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur"/>
-            <feFlood flood-color="#007AFF" flood-opacity="0.65" result="color"/>
+            <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="blur"/>
+            <feFlood flood-color="#007AFF" flood-opacity="0.35" result="color"/>
             <feComposite in="color" in2="blur" operator="in" result="glow"/>
             <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>`;
@@ -203,14 +203,16 @@ function _buildDefs() {
 function _buildConnectors(layout) {
     let html = "";
     for (const cat of layout.categories) {
-        // center → category
-        html += `<line class="web-connector" x1="${CX}" y1="${CY}" x2="${cat.x.toFixed(1)}" y2="${cat.y.toFixed(1)}"
-            stroke="${cat.color}" stroke-width="1" stroke-opacity="0.25"/>`;
+        // center → category — data-cat lets us find it when activating a node
+        html += `<line class="web-connector" data-cat="${cat.key}"
+            x1="${CX}" y1="${CY}" x2="${cat.x.toFixed(1)}" y2="${cat.y.toFixed(1)}"
+            stroke="${cat.color}" stroke-width="1" stroke-opacity="0.3"/>`;
         // category → each stat
         for (const s of cat.stats) {
-            html += `<line class="web-connector" x1="${cat.x.toFixed(1)}" y1="${cat.y.toFixed(1)}"
+            html += `<line class="web-connector" data-cat="${cat.key}" data-stat="${s.key}"
+                x1="${cat.x.toFixed(1)}" y1="${cat.y.toFixed(1)}"
                 x2="${s.x.toFixed(1)}" y2="${s.y.toFixed(1)}"
-                stroke="${cat.color}" stroke-width="0.8" stroke-opacity="0.18"/>`;
+                stroke="${cat.color}" stroke-width="0.8" stroke-opacity="0.22"/>`;
         }
     }
     return html;
@@ -228,8 +230,8 @@ function _buildCategoryNode(cat, catScore) {
            data-category="${cat.key}"
            data-color="${cat.color}"
            transform="translate(${x},${y})">
-            <circle r="38" fill="#161B22" stroke="${cat.color}" stroke-width="1.5"
-                fill-opacity="0.95" filter="url(#${cat.filterId})"/>
+            <circle r="38" fill="#FFFFFF" stroke="${cat.color}" stroke-width="1.5"
+                filter="url(#${cat.filterId})"/>
             <text y="-14" text-anchor="middle" font-size="7" font-family="var(--font-mono,monospace)"
                 fill="${cat.color}" letter-spacing="1" font-weight="600" opacity="0.85">${cat.label.toUpperCase()}</text>
             <text y="6" text-anchor="middle" font-size="20" font-family="var(--font-mono,monospace)"
@@ -256,8 +258,8 @@ function _buildStatNode(cat, s, rawValue) {
            data-desc="${s.description.replace(/"/g, "&quot;")}"
            data-formatted="${formatted.replace(/"/g, "&quot;")}"
            transform="translate(${x},${y})">
-            <circle r="28" fill="#161B22" stroke="${cat.color}" stroke-width="1"
-                fill-opacity="0.9" stroke-opacity="0.5" filter="url(#${cat.filterId})"/>
+            <circle r="28" fill="#FFFFFF" stroke="${cat.color}" stroke-width="1"
+                stroke-opacity="0.7" filter="url(#${cat.filterId})"/>
             <text y="4" text-anchor="middle" font-size="${valueFontSize}"
                 font-family="var(--font-mono,monospace)" fill="${cat.color}" font-weight="600">${formatted}</text>
             <text y="42" text-anchor="middle" font-size="7.5"
@@ -272,15 +274,15 @@ function _buildCenterNode(score, grade) {
            data-color="#007AFF"
            transform="translate(${CX},${CY})">
             <circle class="web-center__pulse" r="65" fill="none"
-                stroke="#007AFF" stroke-width="1.5" stroke-opacity="0.15"/>
-            <circle r="55" fill="#0D1B2E" stroke="#007AFF" stroke-width="2"
+                stroke="#007AFF" stroke-width="1.5" stroke-opacity="0.2"/>
+            <circle r="55" fill="#EFF6FF" stroke="#007AFF" stroke-width="2"
                 filter="url(#glow-center)"/>
             <text y="-6" text-anchor="middle" font-size="28" font-family="var(--font-mono,monospace)"
-                fill="#60A5FA" font-weight="700">${grade}</text>
+                fill="#007AFF" font-weight="700">${grade}</text>
             <text y="16" text-anchor="middle" font-size="13" font-family="var(--font-mono,monospace)"
-                fill="#60A5FA" opacity="0.75">${score}</text>
+                fill="#007AFF" opacity="0.75">${score}</text>
             <text y="30" text-anchor="middle" font-size="7" font-family="var(--font-mono,monospace)"
-                fill="#60A5FA" opacity="0.45" letter-spacing="1">SCORE</text>
+                fill="#007AFF" opacity="0.5" letter-spacing="1">SCORE</text>
         </g>`;
 }
 
@@ -303,7 +305,9 @@ function _buildSvgString(layout, stats, score, grade) {
 
     const centerNode = _buildCenterNode(score, grade);
 
-    return defs + connectors + catNodes + statNodes + centerNode;
+    // Wrap everything in a viewport group for pan/zoom
+    const content = connectors + catNodes + statNodes + centerNode;
+    return defs + `<g id="web-viewport">${content}</g>`;
 }
 
 function _showTooltip(tipEl, nodeEl, stats) {
@@ -370,26 +374,156 @@ function _hideTooltip(tipEl) {
     tipEl.classList.remove("visible");
 }
 
+/** Mark connectors associated with the activated node as active. */
+function _markConnectors(svgEl, nodeEl) {
+    svgEl.querySelectorAll(".web-connector--active").forEach(l => l.classList.remove("web-connector--active"));
+
+    const type = nodeEl.dataset.nodeType;
+    const catKey = nodeEl.dataset.category;
+    const statKey = nodeEl.dataset.stat;
+
+    if (type === "center") {
+        // All connectors stay visible
+        svgEl.querySelectorAll(".web-connector").forEach(l => l.classList.add("web-connector--active"));
+        return;
+    }
+    if (type === "category") {
+        // center→cat + all cat→stat lines for this category
+        svgEl.querySelectorAll(`.web-connector[data-cat="${catKey}"]`).forEach(l => l.classList.add("web-connector--active"));
+        return;
+    }
+    if (type === "stat") {
+        // center→cat line (no data-stat) + cat→this-stat line
+        svgEl.querySelectorAll(`.web-connector[data-cat="${catKey}"]:not([data-stat])`).forEach(l => l.classList.add("web-connector--active"));
+        svgEl.querySelectorAll(`.web-connector[data-cat="${catKey}"][data-stat="${statKey}"]`).forEach(l => l.classList.add("web-connector--active"));
+    }
+}
+
+function _clearActive(svgEl, tipEl) {
+    svgEl.classList.remove("has-active");
+    svgEl.querySelectorAll(".web-node--active").forEach(n => n.classList.remove("web-node--active"));
+    svgEl.querySelectorAll(".web-connector--active").forEach(l => l.classList.remove("web-connector--active"));
+    _hideTooltip(tipEl);
+}
+
+function _activateNode(svgEl, tipEl, node, stats) {
+    svgEl.querySelectorAll(".web-node--active").forEach(n => n.classList.remove("web-node--active"));
+    svgEl.classList.add("has-active");
+    node.classList.add("web-node--active");
+    _markConnectors(svgEl, node);
+    _showTooltip(tipEl, node, stats);
+}
+
 function _attachHoverListeners(svgEl, tipEl, stats) {
+    let lockedNode = null;
+
     svgEl.addEventListener("mouseover", e => {
         const node = e.target.closest(".web-node");
-        if (!node) return;
 
-        // Already active — avoid re-firing as pointer moves between child elements
+        // Moved to empty space — restore lock or deselect
+        if (!node) {
+            if (lockedNode) {
+                _activateNode(svgEl, tipEl, lockedNode, stats);
+            } else if (svgEl.classList.contains("has-active")) {
+                _clearActive(svgEl, tipEl);
+            }
+            return;
+        }
+
+        // Already active — skip re-fire from child element transitions
         if (node.classList.contains("web-node--active")) return;
 
-        // Clear any previously active node before activating the new one
-        svgEl.querySelectorAll(".web-node--active").forEach(n => n.classList.remove("web-node--active"));
-
-        svgEl.classList.add("has-active");
-        node.classList.add("web-node--active");
-        _showTooltip(tipEl, node, stats);
+        _activateNode(svgEl, tipEl, node, stats);
     });
 
     svgEl.addEventListener("mouseleave", () => {
-        svgEl.classList.remove("has-active");
-        svgEl.querySelectorAll(".web-node--active").forEach(n => n.classList.remove("web-node--active"));
-        _hideTooltip(tipEl);
+        if (lockedNode) {
+            _activateNode(svgEl, tipEl, lockedNode, stats);
+        } else {
+            _clearActive(svgEl, tipEl);
+        }
+    });
+
+    svgEl.addEventListener("click", e => {
+        const node = e.target.closest(".web-node");
+        if (node) {
+            lockedNode = node;
+            _activateNode(svgEl, tipEl, node, stats);
+        } else {
+            // Clicked empty space — release lock and clear
+            lockedNode = null;
+            _clearActive(svgEl, tipEl);
+        }
+    });
+}
+
+// Pan/zoom constants
+const ZOOM_MIN = 0.45, ZOOM_MAX = 3.0;
+
+function _attachPanZoom(svgEl) {
+    const vp = svgEl.getElementById ? svgEl.getElementById("web-viewport")
+                                    : svgEl.querySelector("#web-viewport");
+    if (!vp) return;
+
+    let scale = 1, tx = 0, ty = 0;
+    let dragging = false, lastX = 0, lastY = 0;
+
+    function applyTransform() {
+        vp.setAttribute("transform", `translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${scale.toFixed(4)})`);
+    }
+
+    // Wheel to zoom, centred on cursor
+    svgEl.addEventListener("wheel", e => {
+        e.preventDefault();
+        const rect = svgEl.getBoundingClientRect();
+        // Cursor position in SVG viewBox coordinates
+        const vbW = 900, vbH = 600;
+        const scaleX = vbW / rect.width, scaleY = vbH / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top)  * scaleY;
+
+        const delta = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, scale * delta));
+        const ratio = newScale / scale;
+
+        // Adjust translation so the point under the cursor stays fixed
+        tx = mx + (tx - mx) * ratio;
+        ty = my + (ty - my) * ratio;
+        scale = newScale;
+        applyTransform();
+    }, { passive: false });
+
+    // Drag to pan
+    svgEl.addEventListener("mousedown", e => {
+        // Only primary button; ignore if clicking a node (let hover fire)
+        if (e.button !== 0) return;
+        dragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        svgEl.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mousemove", e => {
+        if (!dragging) return;
+        const rect = svgEl.getBoundingClientRect();
+        const vbW = 900, vbH = 600;
+        const scaleX = vbW / rect.width, scaleY = vbH / rect.height;
+        tx += (e.clientX - lastX) * scaleX;
+        ty += (e.clientY - lastY) * scaleY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        applyTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+        dragging = false;
+        svgEl.style.cursor = "";
+    });
+
+    // Double-click to reset
+    svgEl.addEventListener("dblclick", () => {
+        scale = 1; tx = 0; ty = 0;
+        applyTransform();
     });
 }
 
@@ -410,4 +544,5 @@ function renderStatsWeb(panelEl, stats) {
     svgEl.innerHTML = _buildSvgString(layout, stats, score, grade);
 
     _attachHoverListeners(svgEl, tipEl, stats);
+    _attachPanZoom(svgEl);
 }

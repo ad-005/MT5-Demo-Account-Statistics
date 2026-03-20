@@ -2219,18 +2219,21 @@ td.negative {
    ======================================================================== */
 
 .stats-web-panel {
-    background: #0D1117;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #FFFFFF;
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
     position: relative;
     overflow: hidden;
     margin-bottom: 24px;
+    box-shadow: var(--shadow-md);
 }
 
 .stats-web-svg {
     width: 100%;
     height: auto;
     display: block;
+    cursor: grab;
+    user-select: none;
 }
 
 .web-node {
@@ -2248,16 +2251,20 @@ td.negative {
 }
 
 @keyframes node-active-glow {
-    0%, 100% { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.25)); }
-    50%       { filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.65)); }
+    0%, 100% { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.12)); }
+    50%       { filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.28)); }
 }
 
 .stats-web-svg.has-active .web-node:not(.web-node--active) circle {
     opacity: 0.2;
 }
 
-.stats-web-svg.has-active .web-connector {
+.stats-web-svg.has-active .web-connector:not(.web-connector--active) {
     opacity: 0.05;
+}
+
+.stats-web-svg.has-active .web-connector--active {
+    opacity: 1;
 }
 
 .web-connector {
@@ -2282,14 +2289,15 @@ td.negative {
     top: 14px;
     right: 14px;
     width: 200px;
-    background: #161B22;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
     border-left: 3px solid #007AFF;
     border-radius: var(--radius);
     padding: 12px 14px;
     opacity: 0;
     pointer-events: none;
     transition: opacity 150ms ease;
+    box-shadow: var(--shadow-md);
 }
 
 .stats-web-tooltip.visible {
@@ -2306,7 +2314,7 @@ td.negative {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--text-muted);
     margin-bottom: 4px;
     font-family: var(--font-mono);
 }
@@ -2315,14 +2323,14 @@ td.negative {
     font-size: 24px;
     font-weight: 700;
     font-family: var(--font-mono);
-    color: #fff;
+    color: var(--text-primary);
     line-height: 1.2;
     margin-bottom: 6px;
 }
 
 .swt__desc {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--text-secondary);
     line-height: 1.5;
     margin-bottom: 6px;
 }
@@ -2343,6 +2351,6 @@ td.negative {
         width: 100%;
         border-radius: 0 0 var(--radius-lg) var(--radius-lg);
         border-left: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-top: 1px solid var(--border-light);
     }
 }
