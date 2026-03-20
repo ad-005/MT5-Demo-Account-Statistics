@@ -69,7 +69,7 @@ function renderReportList() {
 function reportCard(r) {
     const date = new Date(r.created_at).toLocaleDateString("en-US", {
         year: "numeric", month: "short", day: "numeric",
-        hour: "2-digit", minute: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
     });
     const checked = selectedIds.has(r.id) ? "checked" : "";
     const profit = r.stats.net_profit;
@@ -163,7 +163,7 @@ function renderReportDetail(r) {
     const content = document.getElementById("reports-content");
     const date = new Date(r.created_at).toLocaleDateString("en-US", {
         year: "numeric", month: "short", day: "numeric",
-        hour: "2-digit", minute: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
     });
     const s = r.stats;
 
@@ -171,18 +171,12 @@ function renderReportDetail(r) {
         ? `<div class="report-detail__range">Date range: ${r.date_range_start || "..."} to ${r.date_range_end || "..."}</div>`
         : "";
 
-    const scoreBlock = r.overall_score != null
-        ? `<div class="report-detail__score ${r.overall_score >= 70 ? "score-green" : r.overall_score >= 40 ? "score-yellow" : "score-red"}">
-               <span class="report-detail__score-value">${r.overall_score}</span>
-               <span class="report-detail__score-grade">${r.overall_grade || ""}</span>
-           </div>`
-        : "";
-
     content.innerHTML = `
         <div class="report-detail">
+            <button class="btn-back" onclick="backToList()" title="Back to reports">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <div class="report-detail__header">
-                <button class="btn btn-sm" onclick="backToList()">Back</button>
-                ${scoreBlock}
                 <div>
                     <h3>${escHtml(r.label)}</h3>
                     <div class="report-detail__meta">${escHtml(r.account_name)} | ${r.trades_count} trades | ${date}</div>
@@ -192,39 +186,38 @@ function renderReportDetail(r) {
                     <button class="btn btn-sm" onclick="compareLiveUI('${r.id}')">Compare with Live</button>
                 </div>
             </div>
+            ${renderScoreCard(r.stats)}
 
-            <div class="stats-section-header">Performance</div>
-            <div class="stats-grid">
-                ${simpleStatCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0)}
-                ${simpleStatCard("Win Rate", s.win_rate + "%", s.win_rate >= 50)}
-                ${simpleStatCard("Profit Factor", s.profit_factor.toFixed(2))}
-                ${simpleStatCard("Avg Win", "$" + s.average_profit.toFixed(2), true)}
-                ${simpleStatCard("Largest Win", "$" + s.largest_win.toFixed(2), true)}
-                ${simpleStatCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0)}
-            </div>
+            <div class="card-stacks-grid">
+            ${renderCardStack("performance", "Performance", 6, [
+                simpleStatCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0),
+                simpleStatCard("Win Rate", s.win_rate + "%", s.win_rate >= 50),
+                simpleStatCard("Profit Factor", s.profit_factor.toFixed(2)),
+                simpleStatCard("Avg Win", "$" + s.average_profit.toFixed(2), true),
+                simpleStatCard("Largest Win", "$" + s.largest_win.toFixed(2), true),
+                simpleStatCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0),
+            ].join(""), r.stats)}
 
-            <div class="stats-section-header">Risk</div>
-            <div class="stats-grid">
-                ${simpleStatCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false)}
-                ${simpleStatCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false)}
-                ${simpleStatCard("Avg Loss", "$" + s.average_loss.toFixed(2), false)}
-                ${simpleStatCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false)}
-            </div>
+            ${renderCardStack("risk", "Risk", 4, [
+                simpleStatCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false),
+                simpleStatCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false),
+                simpleStatCard("Avg Loss", "$" + s.average_loss.toFixed(2), false),
+                simpleStatCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false),
+            ].join(""), r.stats)}
 
-            <div class="stats-section-header">Ratios</div>
-            <div class="stats-grid">
-                ${simpleStatCard("Sharpe Ratio", s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1)}
-                ${simpleStatCard("Sortino Ratio", s.sortino_ratio.toFixed(2), s.sortino_ratio >= 1)}
-                ${simpleStatCard("R:R Ratio", s.risk_reward_ratio.toFixed(2))}
-            </div>
+            ${renderCardStack("ratios", "Ratios", 3, [
+                simpleStatCard("Sharpe Ratio", s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1),
+                simpleStatCard("Sortino Ratio", s.sortino_ratio.toFixed(2), s.sortino_ratio >= 1),
+                simpleStatCard("R:R Ratio", s.risk_reward_ratio.toFixed(2)),
+            ].join(""), r.stats)}
 
-            <div class="stats-section-header">Volume & Streaks</div>
-            <div class="stats-grid">
-                ${simpleStatCard("Total Trades", s.total_trades)}
-                ${simpleStatCard("Buy %", s.buy_percentage + "%")}
-                ${simpleStatCard("Sell %", s.sell_percentage + "%")}
-                ${simpleStatCard("Consec. Wins", s.consecutive_wins)}
-                ${simpleStatCard("Consec. Losses", s.consecutive_losses)}
+            ${renderCardStack("volume", "Volume & Streaks", 5, [
+                simpleStatCard("Total Trades", s.total_trades),
+                simpleStatCard("Buy %", s.buy_percentage + "%"),
+                simpleStatCard("Sell %", s.sell_percentage + "%"),
+                simpleStatCard("Consec. Wins", s.consecutive_wins),
+                simpleStatCard("Consec. Losses", s.consecutive_losses),
+            ].join(""), r.stats)}
             </div>
 
             ${renderSessionDaily(s)}
@@ -343,8 +336,10 @@ function renderComparison(c) {
 
     content.innerHTML = `
         <div class="comparison-view">
+            <button class="btn-back" onclick="backToList()" title="Back to reports">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <div class="comparison-header">
-                <button class="btn btn-sm" onclick="backToList()">Back</button>
                 <h3>Comparison</h3>
             </div>
             <div class="section">

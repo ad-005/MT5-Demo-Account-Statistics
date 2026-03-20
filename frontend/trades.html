@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MT5 Demo Stats - Trades</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=6">
+    <link rel="stylesheet" href="/static/css/style.css?v=8">
 </head>
 <body>
     <div class="app">
         <aside class="sidebar">
-            <h1>MT5 Stats</h1>
+            <h1><span class="brand-icon"><span></span><span></span><span></span><span></span><span></span></span>MT5 Stats</h1>
             <nav>
                 <a href="/">Dashboard</a>
                 <a href="/trades" class="active">Trades</a>
@@ -18,12 +18,12 @@
         </aside>
 
         <main class="main">
-            <h2 style="margin-bottom:20px">Trade History</h2>
+            <h2 style="margin-bottom:20px;font-size:17px;font-weight:700;letter-spacing:-0.2px">Trade History</h2>
 
             <div class="section">
                 <div class="form-group" style="margin-bottom:16px">
                     <label for="account-select">Account</label>
-                    <select id="account-select" style="width:300px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:14px;">
+                    <select id="account-select" style="width:300px;padding:9px 12px;background:var(--bg-surface);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:14px;font-family:inherit;">
                         <option value="">-- Select Account --</option>
                     </select>
                 </div>
@@ -66,6 +66,9 @@
 
             <div id="trades-content">
                 <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);margin-bottom:16px;opacity:0.5">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
                     <h3>Select an Account</h3>
                     <p>Choose an account above to view and filter trades.</p>
                 </div>
@@ -73,7 +76,7 @@
         </main>
     </div>
 
-    <script src="/static/js/api.js?v=6"></script>
-    <script src="/static/js/trades.js?v=6"></script>
+    <script src="/static/js/api.js?v=8"></script>
+    <script src="/static/js/trades.js?v=8"></script>
 </body>
 </html>

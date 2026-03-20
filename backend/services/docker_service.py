@@ -151,6 +151,17 @@ async def ensure_colima_x86() -> tuple[bool, str]:
         timeout=300,
     )
     if code != 0:
+        if "already exists" in stderr:
+            # Lima dir exists but wasn't listed — try a plain start
+            logger.info(f"Profile directory already exists, retrying as plain start...")
+            code2, _, stderr2 = await _run(
+                "colima", "start", COLIMA_PROFILE,
+                "--runtime", "docker",
+                timeout=300,
+            )
+            if code2 != 0:
+                return False, f"Failed to start existing Colima x86_64 profile: {stderr2}"
+            return True, ""
         return False, f"Failed to create Colima x86_64 profile: {stderr}"
 
     return True, ""
