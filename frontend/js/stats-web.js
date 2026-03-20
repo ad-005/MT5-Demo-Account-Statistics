@@ -221,7 +221,6 @@ function _buildCategoryNode(cat, catScore) {
     const y = cat.y.toFixed(1);
     const gradeText = catScore ? catScore.grade : "–";
     const scoreText = catScore ? String(catScore.score) : "";
-    const catLabel = cat.label.substring(0, 4).toUpperCase();
 
     return `
         <g class="web-node web-node--cat"
@@ -231,8 +230,8 @@ function _buildCategoryNode(cat, catScore) {
            transform="translate(${x},${y})">
             <circle r="38" fill="#161B22" stroke="${cat.color}" stroke-width="1.5"
                 fill-opacity="0.95" filter="url(#${cat.filterId})"/>
-            <text y="-14" text-anchor="middle" font-size="7.5" font-family="var(--font-mono,monospace)"
-                fill="${cat.color}" letter-spacing="1.5" font-weight="600" opacity="0.85">${catLabel}</text>
+            <text y="-14" text-anchor="middle" font-size="7" font-family="var(--font-mono,monospace)"
+                fill="${cat.color}" letter-spacing="1" font-weight="600" opacity="0.85">${cat.label.toUpperCase()}</text>
             <text y="6" text-anchor="middle" font-size="20" font-family="var(--font-mono,monospace)"
                 fill="${cat.color}" font-weight="700">${gradeText}</text>
             <text y="21" text-anchor="middle" font-size="9.5" font-family="var(--font-mono,monospace)"
@@ -376,7 +375,12 @@ function _attachHoverListeners(svgEl, tipEl, stats) {
         const node = e.target.closest(".web-node");
         if (!node) return;
 
-        // Dim everything else
+        // Already active — avoid re-firing as pointer moves between child elements
+        if (node.classList.contains("web-node--active")) return;
+
+        // Clear any previously active node before activating the new one
+        svgEl.querySelectorAll(".web-node--active").forEach(n => n.classList.remove("web-node--active"));
+
         svgEl.classList.add("has-active");
         node.classList.add("web-node--active");
         _showTooltip(tipEl, node, stats);

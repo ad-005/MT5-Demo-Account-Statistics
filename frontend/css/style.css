@@ -2238,12 +2238,18 @@ td.negative {
 }
 
 .web-node circle {
-    transition: stroke-width 150ms ease, opacity 200ms ease;
+    transition: opacity 200ms ease;
 }
 
-.web-node--active circle {
-    stroke-width: 2.5 !important;
-    opacity: 1 !important;
+.web-node--active circle:not(.web-center__pulse) {
+    stroke-width: 2 !important;
+    stroke-opacity: 1 !important;
+    animation: node-active-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes node-active-glow {
+    0%, 100% { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.25)); }
+    50%       { filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.65)); }
 }
 
 .stats-web-svg.has-active .web-node:not(.web-node--active) circle {
