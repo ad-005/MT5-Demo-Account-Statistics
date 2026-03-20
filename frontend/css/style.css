@@ -2343,46 +2343,96 @@ td.negative {
     flex-wrap: wrap;
 }
 
-/* Chart control buttons — reset & lock, floating over bottom-right of panel */
+/* Chart control buttons — reset & lock, top-right of panel */
 .stats-web-controls {
     position: absolute;
-    bottom: 12px;
+    top: 12px;
     right: 12px;
     display: flex;
+    align-items: center;
     gap: 6px;
     z-index: 2;
 }
 
 .stats-web-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     cursor: pointer;
-    font-size: 15px;
-    line-height: 1;
+    color: var(--text-secondary);
     box-shadow: var(--shadow-sm);
     transition: background var(--transition-fast), box-shadow var(--transition-fast),
-                border-color var(--transition-fast);
+                border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .stats-web-btn:hover {
     background: var(--bg-surface);
     box-shadow: var(--shadow-md);
-    border-color: var(--border);
+    color: var(--text-primary);
+}
+
+.stats-web-btn--reset {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius);
 }
 
 .stats-web-btn--active {
     background: var(--accent-glow);
     border-color: var(--accent);
+    color: var(--accent);
 }
 
 .stats-web-btn--active:hover {
     background: var(--accent-glow);
+    color: var(--accent);
+}
+
+/* CSS tooltips via data-tooltip attribute */
+.stats-web-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 7px);
+    right: 0;
+    background: var(--text-primary);
+    color: var(--bg-secondary);
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 5px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 140ms ease, transform 140ms ease;
+    z-index: 10;
+}
+
+/* small arrow pointing down */
+.stats-web-btn::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 1px);
+    right: 12px;
+    border: 5px solid transparent;
+    border-top-color: var(--text-primary);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 140ms ease, transform 140ms ease;
+    z-index: 10;
+}
+
+.stats-web-btn:hover::after,
+.stats-web-btn:hover::before {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 @media (max-width: 480px) {

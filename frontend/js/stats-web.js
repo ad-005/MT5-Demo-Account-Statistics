@@ -155,9 +155,22 @@ const STAT_GRAPH_CONFIG = [
 ];
 
 // Layout constants
-const CX = 450, CY = 310, CAT_RADIUS = 170, STAT_RADIUS = 130, ARC_SPREAD = 110;
+const CX = 450, CY = 330, CAT_RADIUS = 170, ARC_SPREAD = 110;
+const STAT_NODE_R = 28; // radius of a stat circle
 
 function _rad(deg) { return deg * Math.PI / 180; }
+
+/**
+ * Compute the minimum spoke length so that adjacent stat nodes (each with
+ * radius STAT_NODE_R) have at least MIN_GAP pixels of clearance between them.
+ */
+function _statRadius(n) {
+    const MIN_GAP = 10;
+    const MIN_CHORD = STAT_NODE_R * 2 + MIN_GAP; // 66px
+    if (n <= 1) return 145;
+    const halfAngle = _rad(ARC_SPREAD / (2 * (n - 1)));
+    return Math.max(145, Math.ceil(MIN_CHORD / (2 * Math.sin(halfAngle))));
+}
 
 function _buildLayout() {
     const categories = STAT_GRAPH_CONFIG.map(cat => {
@@ -165,12 +178,13 @@ function _buildLayout() {
         const catY = CY + CAT_RADIUS * Math.sin(_rad(cat.angle));
         const n = cat.stats.length;
         const spread = ARC_SPREAD / Math.max(n - 1, 1);
+        const statR = _statRadius(n);
 
         const stats = cat.stats.map((s, i) => {
             const offset = (i - (n - 1) / 2) * spread;
             const a = cat.angle + offset;
-            const sx = catX + STAT_RADIUS * Math.cos(_rad(a));
-            const sy = catY + STAT_RADIUS * Math.sin(_rad(a));
+            const sx = catX + statR * Math.cos(_rad(a));
+            const sy = catY + statR * Math.sin(_rad(a));
             return { ...s, x: sx, y: sy };
         });
 
@@ -601,11 +615,20 @@ function renderStatsWeb(panelEl, stats) {
     const controls = document.createElement("div");
     controls.className = "stats-web-controls";
     controls.innerHTML = `
-        <button class="stats-web-btn" title="Reset view" aria-label="Reset chart view">
-            <span class="swb-icon">↺</span>
+        <button class="stats-web-btn stats-web-btn--reset" data-tooltip="Reset view" aria-label="Reset chart view">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <path d="M4 10a6 6 0 1 1 1.5 4"/>
+                <polyline points="1 14 4.5 10.5 8 14"/>
+            </svg>
         </button>
-        <button class="stats-web-btn" title="Lock pan &amp; zoom (enable page scroll)" aria-label="Lock chart">
-            <span class="swb-icon">🔓</span>
+        <button class="stats-web-btn stats-web-btn--lock" data-tooltip="Lock pan &amp; zoom" aria-label="Lock chart">
+            <svg class="swb-lock-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75"
+                 stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                <rect x="4" y="9" width="12" height="9" rx="2"/>
+                <path d="M7 9V6a3 3 0 0 1 6 0v3"/>
+                <circle cx="10" cy="14" r="1.2" fill="currentColor" stroke="none"/>
+            </svg>
         </button>`;
     panelEl.appendChild(controls);
 

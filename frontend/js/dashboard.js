@@ -395,7 +395,7 @@ function renderStats(s) {
     content.innerHTML = `
         ${scoreCardHtml}
         <div class="stats-web-panel">
-            <svg class="stats-web-svg" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg"
+            <svg class="stats-web-svg" viewBox="0 0 900 660" xmlns="http://www.w3.org/2000/svg"
                  preserveAspectRatio="xMidYMid meet"></svg>
             <div class="stats-web-tooltip" aria-live="polite"></div>
         </div>
