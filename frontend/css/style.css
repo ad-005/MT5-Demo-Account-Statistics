@@ -2343,13 +2343,20 @@ td.negative {
 
 /* Radar Chart */
 
+.comparison-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
 .radar-section {
     background: var(--bg-secondary);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
     padding: 20px 24px;
-    margin-bottom: 24px;
     box-shadow: var(--shadow-sm);
+    min-height: 100%;
 }
 
 .radar-section h2 {
@@ -2366,6 +2373,8 @@ td.negative {
     flex-direction: column;
     align-items: center;
     gap: 16px;
+    height: 100%;
+    justify-content: center;
 }
 
 .radar-svg {
@@ -2403,6 +2412,90 @@ td.negative {
     flex-shrink: 0;
 }
 
+/* Slope Chart */
+
+.slope-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    box-shadow: var(--shadow-sm);
+    min-height: 100%;
+}
+
+.slope-section h2 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.slope-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    height: 100%;
+}
+
+.slope-svg {
+    width: min(100%, 540px);
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.slope-axis-label {
+    font-size: 11px;
+    fill: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.slope-rail {
+    stroke: var(--border-light);
+    stroke-width: 1.2;
+}
+
+.slope-line {
+    stroke-width: 2;
+    fill: none;
+    opacity: 0.88;
+}
+
+.slope-line--improved { stroke: var(--green); }
+.slope-line--declined { stroke: var(--red); }
+.slope-line--neutral { stroke: var(--text-muted); }
+
+.slope-metric-label {
+    font-size: 12px;
+    font-weight: 500;
+    fill: var(--text-secondary);
+}
+
+.slope-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+
+.slope-value--left { fill: #007AFF; }
+.slope-value--right { fill: #FF9500; }
+
+.slope-delta {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.slope-delta--improved { fill: var(--green); }
+.slope-delta--declined { fill: var(--red); }
+.slope-delta--neutral { fill: var(--text-muted); }
+
 @media (max-width: 768px) {
     .reports-header {
         flex-direction: column;
@@ -2420,6 +2513,16 @@ td.negative {
     .comparison-table th,
     .comparison-table td {
         padding: 8px 6px;
+    }
+    .comparison-chart-grid {
+        grid-template-columns: 1fr;
+    }
+    .radar-section,
+    .slope-section {
+        padding: 18px 16px;
+    }
+    .slope-svg {
+        width: min(100%, 500px);
     }
 }
 
