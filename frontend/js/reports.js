@@ -403,6 +403,7 @@ function renderComparison(c) {
     const dictHtml = renderDictComparison("Session Win Rates", c.left_stats.session_win_rates, c.right_stats.session_win_rates, leftName, rightName);
     const dailyHtml = renderDictComparison("Daily Win Rates", c.left_stats.daily_win_rates, c.right_stats.daily_win_rates, leftName, rightName);
     const radarHtml = renderRadarChart(c.left_stats, c.right_stats, c.left_label, c.right_label);
+    const slopeHtml = renderSlopeChart(c.left_stats, c.right_stats, c.left_label, c.right_label);
     const improvementHtml = renderImprovementCard(c);
 
     content.innerHTML = `
@@ -414,7 +415,10 @@ function renderComparison(c) {
                 <h3>Comparison</h3>
             </div>
             ${improvementHtml}
-            ${radarHtml}
+            <div class="comparison-chart-grid">
+                ${radarHtml}
+                ${slopeHtml}
+            </div>
             <div class="section">
                 <table class="comparison-table">
                     <thead>
@@ -621,6 +625,109 @@ function renderRadarChart(leftStats, rightStats, leftLabel, rightLabel) {
                     <polygon points="${ptsStr(leftPts)}" fill="${LEFT_COLOR}" fill-opacity="0.18" stroke="${LEFT_COLOR}" stroke-width="2" stroke-linejoin="round"/>
                     ${rightDots}
                     ${leftDots}
+                    ${labels}
+                </svg>
+                <div class="radar-legend">
+                    <div class="radar-legend-item">
+                        <span class="radar-legend-swatch" style="background:${LEFT_COLOR}"></span>
+                        <span>${escHtml(leftLabel)}</span>
+                    </div>
+                    <div class="radar-legend-item">
+                        <span class="radar-legend-swatch" style="background:${RIGHT_COLOR}"></span>
+                        <span>${escHtml(rightLabel)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function formatMetricValue(metricKey, value) {
+    if (metricKey === "win_rate" || metricKey.endsWith("_pct")) return `${value.toFixed(1)}%`;
+    if (metricKey === "profit_factor" || metricKey === "sharpe_ratio" || metricKey === "sortino_ratio" || metricKey === "risk_reward_ratio") {
+        return value.toFixed(2);
+    }
+    if (metricKey.includes("trades") || metricKey.includes("consecutive")) return Math.round(value).toString();
+    return `$${value.toFixed(2)}`;
+}
+
+function getMetricTrendClass(metricKey, prevVal, currVal) {
+    const bench = BENCHMARKS[metricKey];
+    if (!bench) return "neutral";
+    if (currVal === prevVal) return "neutral";
+    return bench.higher
+        ? (currVal > prevVal ? "improved" : "declined")
+        : (currVal < prevVal ? "improved" : "declined");
+}
+
+function renderSlopeChart(leftStats, rightStats, leftLabel, rightLabel) {
+    const metrics = RADAR_METRICS;
+    const svgWidth = 540;
+    const svgHeight = 336;
+    const xPrev = 185;
+    const xCurr = 355;
+    const yTop = 46;
+    const yBottom = 266;
+    const LEFT_COLOR = "#007AFF";
+    const RIGHT_COLOR = "#FF9500";
+
+    const rowGap = metrics.length > 1 ? (yBottom - yTop) / (metrics.length - 1) : 0;
+    const rows = metrics.map((m, idx) => {
+        const prevRaw = Number(leftStats?.[m.key] ?? 0);
+        const currRaw = Number(rightStats?.[m.key] ?? 0);
+        const prevNorm = radarNormalize(m.key, prevRaw);
+        const currNorm = radarNormalize(m.key, currRaw);
+        const y = yTop + idx * rowGap;
+        const prevY = y + (0.5 - prevNorm) * 24;
+        const currY = y + (0.5 - currNorm) * 24;
+        const trend = getMetricTrendClass(m.key, prevRaw, currRaw);
+        const delta = currRaw - prevRaw;
+        const deltaSign = delta > 0 ? "+" : "";
+        const deltaTxt = `${deltaSign}${formatMetricValue(m.key, delta)}`;
+
+        return {
+            key: m.key,
+            label: m.label,
+            prevRaw,
+            currRaw,
+            prevY,
+            currY,
+            y,
+            trend,
+            deltaTxt,
+        };
+    });
+
+    const lines = rows.map((r) => `
+        <line x1="${xPrev}" y1="${r.prevY.toFixed(1)}" x2="${xCurr}" y2="${r.currY.toFixed(1)}" class="slope-line slope-line--${r.trend}" />
+    `).join("");
+
+    const points = rows.map((r) => `
+        <circle cx="${xPrev}" cy="${r.prevY.toFixed(1)}" r="4.2" fill="${LEFT_COLOR}" />
+        <circle cx="${xCurr}" cy="${r.currY.toFixed(1)}" r="4.2" fill="${RIGHT_COLOR}" />
+    `).join("");
+
+    const labels = rows.map((r) => `
+        <text x="44" y="${((r.prevY + r.currY) / 2).toFixed(1)}" dominant-baseline="central" class="slope-metric-label">${r.label}</text>
+        <text x="${(xPrev - 12)}" y="${r.prevY.toFixed(1)}" text-anchor="end" dominant-baseline="central" class="slope-value slope-value--left">${formatMetricValue(r.key, r.prevRaw)}</text>
+        <text x="${(xCurr + 12)}" y="${r.currY.toFixed(1)}" text-anchor="start" dominant-baseline="central" class="slope-value slope-value--right">${formatMetricValue(r.key, r.currRaw)}</text>
+        <text x="${(xCurr + 132)}" y="${r.currY.toFixed(1)}" text-anchor="end" dominant-baseline="central" class="slope-delta slope-delta--${r.trend}">${escHtml(r.deltaTxt)}</text>
+    `).join("");
+
+    const rails = `
+        <line x1="${xPrev}" y1="${(yTop - 20)}" x2="${xPrev}" y2="${(yBottom + 20)}" class="slope-rail"/>
+        <line x1="${xCurr}" y1="${(yTop - 20)}" x2="${xCurr}" y2="${(yBottom + 20)}" class="slope-rail"/>
+    `;
+
+    return `
+        <div class="slope-section">
+            <h2>Slope Comparison</h2>
+            <div class="slope-wrap">
+                <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="slope-svg" aria-label="Slope chart comparing previous and current stats">
+                    <text x="${xPrev}" y="18" text-anchor="middle" class="slope-axis-label">${escHtml(leftLabel)}</text>
+                    <text x="${xCurr}" y="18" text-anchor="middle" class="slope-axis-label">${escHtml(rightLabel)}</text>
+                    ${rails}
+                    ${lines}
+                    ${points}
                     ${labels}
                 </svg>
                 <div class="radar-legend">
