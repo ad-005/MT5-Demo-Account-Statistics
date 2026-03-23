@@ -246,11 +246,11 @@ function _buildCategoryNode(cat, catScore) {
            transform="translate(${x},${y})">
             <circle r="38" fill="#FFFFFF" stroke="${cat.color}" stroke-width="1.5"
                 filter="url(#${cat.filterId})"/>
-            <text y="-14" text-anchor="middle" font-size="7" font-family="var(--font-mono,monospace)"
+            <text y="-14" text-anchor="middle" font-size="7" font-family="var(--font-ui,sans-serif)"
                 fill="${cat.color}" letter-spacing="1" font-weight="600" opacity="0.85">${cat.label.toUpperCase()}</text>
-            <text y="6" text-anchor="middle" font-size="20" font-family="var(--font-mono,monospace)"
+            <text y="6" text-anchor="middle" font-size="20" font-family="var(--font-ui,sans-serif)"
                 fill="${cat.color}" font-weight="700">${gradeText}</text>
-            <text y="21" text-anchor="middle" font-size="9.5" font-family="var(--font-mono,monospace)"
+            <text y="21" text-anchor="middle" font-size="9.5" font-family="var(--font-ui,sans-serif)"
                 fill="${cat.color}" opacity="0.7">${scoreText}</text>
         </g>`;
 }
@@ -275,9 +275,9 @@ function _buildStatNode(cat, s, rawValue) {
             <circle r="28" fill="#FFFFFF" stroke="${cat.color}" stroke-width="1"
                 stroke-opacity="0.7" filter="url(#${cat.filterId})"/>
             <text y="4" text-anchor="middle" font-size="${valueFontSize}"
-                font-family="var(--font-mono,monospace)" fill="${cat.color}" font-weight="600">${formatted}</text>
+                font-family="var(--font-ui,sans-serif)" fill="${cat.color}" font-weight="600">${formatted}</text>
             <text y="42" text-anchor="middle" font-size="7.5"
-                font-family="var(--font-mono,monospace)" fill="${cat.color}" opacity="0.65">${s.label}</text>
+                font-family="var(--font-ui,sans-serif)" fill="${cat.color}" opacity="0.65">${s.label}</text>
         </g>`;
 }
 
@@ -291,11 +291,11 @@ function _buildCenterNode(score, grade) {
                 stroke="#007AFF" stroke-width="1.5" stroke-opacity="0.2"/>
             <circle r="55" fill="#EFF6FF" stroke="#007AFF" stroke-width="2"
                 filter="url(#glow-center)"/>
-            <text y="-6" text-anchor="middle" font-size="28" font-family="var(--font-mono,monospace)"
+            <text y="-6" text-anchor="middle" font-size="28" font-family="var(--font-ui,sans-serif)"
                 fill="#007AFF" font-weight="700">${grade}</text>
-            <text y="16" text-anchor="middle" font-size="13" font-family="var(--font-mono,monospace)"
+            <text y="16" text-anchor="middle" font-size="13" font-family="var(--font-ui,sans-serif)"
                 fill="#007AFF" opacity="0.75">${score}</text>
-            <text y="30" text-anchor="middle" font-size="7" font-family="var(--font-mono,monospace)"
+            <text y="30" text-anchor="middle" font-size="7" font-family="var(--font-ui,sans-serif)"
                 fill="#007AFF" opacity="0.5" letter-spacing="1">SCORE</text>
         </g>`;
 }

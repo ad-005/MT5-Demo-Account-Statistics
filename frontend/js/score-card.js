@@ -162,15 +162,45 @@ function renderScoreCard(stats) {
 
     const { score, grade, components, lowSample, ddPenalty } = computeOverallScore(stats);
     const colorClass = score >= 70 ? "score-card--green" : score >= 40 ? "score-card--yellow" : "score-card--red";
+    const categoryRings = [
+        { key: "performance", label: "Performance", colorVar: "var(--score-ring-performance)" },
+        { key: "risk", label: "Risk", colorVar: "var(--score-ring-risk)" },
+        { key: "ratios", label: "Ratios", colorVar: "var(--score-ring-ratios)" },
+    ].map(ring => {
+        const category = computeCategoryScore(stats, ring.key);
+        return category ? { ...ring, score: category.score } : null;
+    }).filter(Boolean);
 
-    const radius = 34;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (score / 100) * circumference;
+    const rings = [
+        { label: "Overall", score, colorVar: "var(--score-ring-overall)" },
+        ...categoryRings,
+    ];
+
+    const ringsSvg = rings.map((ring, index) => {
+        const radius = 51 - (index * 10);
+        const stroke = Math.max(6, 10 - index);
+        const clamped = Math.max(0, Math.min(100, ring.score));
+        const circumference = 2 * Math.PI * radius;
+        const offset = circumference - (clamped / 100) * circumference;
+
+        return `
+            <g class="score-card__ring" style="color:${ring.colorVar}">
+                <circle class="score-card__ring-track" cx="60" cy="60" r="${radius}" style="stroke-width:${stroke}"></circle>
+                <circle class="score-card__ring-fill" cx="60" cy="60" r="${radius}" style="stroke-width:${stroke};stroke-dasharray:${circumference};stroke-dashoffset:${offset}"></circle>
+            </g>`;
+    }).join("");
+
+    const ringLegend = rings.map(ring => `
+        <div class="score-card__legend-item">
+            <span class="score-card__legend-dot" style="--dot-color:${ring.colorVar}"></span>
+            <span class="score-card__legend-name">${ring.label}</span>
+            <span class="score-card__legend-value">${ring.score}</span>
+        </div>
+    `).join("");
 
     const sorted = [...components].sort((a, b) => a.subScore - b.subScore);
 
     const componentRows = sorted.map(c => {
-        const weightPct = Math.round(c.bench.weight * 100);
         const formatted = c.bench.format(c.value);
         const barCls = c.statusCls === "above" ? "above" : c.statusCls === "at" ? "at" : "below";
         const statusLabel = c.statusCls === "above"
@@ -211,19 +241,30 @@ function renderScoreCard(stats) {
     return `
         <div class="score-card ${colorClass}" onclick="toggleScoreBreakdown(this)">
             <div class="score-card__header">
-                <svg class="score-card__gauge" viewBox="0 0 80 80">
-                    <circle class="score-card__gauge-bg" cx="40" cy="40" r="${radius}"/>
-                    <circle class="score-card__gauge-fill" cx="40" cy="40" r="${radius}"
-                        stroke-dasharray="${circumference}"
-                        stroke-dashoffset="${offset}"/>
-                </svg>
+                <div class="score-card__ring-wrap" aria-hidden="true">
+                    <svg class="score-card__rings" viewBox="0 0 120 120">
+                        ${ringsSvg}
+                    </svg>
+                </div>
                 <div class="score-card__text">
-                    <div class="score-card__title">Overall Score</div>
-                    <div class="score-card__numbers">
-                        <span class="score-card__score">${score}</span>
-                        <span class="score-card__grade">${grade}</span>
+                    <div class="score-card__title">Overall Performance</div>
+                    <div class="score-card__label">${badges || "Expand to view detailed benchmark breakdown"}</div>
+                    <div class="score-card__legend">
+                        ${ringLegend}
                     </div>
-                    <div class="score-card__label">${badges || "Click to see breakdown"}</div>
+                </div>
+                <div class="score-card__summary">
+                    <div class="score-card__grade-box">
+                        <div class="score-card__grade">${grade}</div>
+                        <div class="score-card__summary-label">Grade</div>
+                    </div>
+                    <div class="score-card__points-box">
+                        <div class="score-card__score-row">
+                            <span class="score-card__score">${score}</span>
+                            <span class="score-card__score-max">/100</span>
+                        </div>
+                        <div class="score-card__summary-label">Points</div>
+                    </div>
                 </div>
                 <svg class="score-card__chevron" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
