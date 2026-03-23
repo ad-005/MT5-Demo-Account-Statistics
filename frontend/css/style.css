@@ -918,27 +918,26 @@ body {
 
 /* The header card — square-ish, centered content */
 .card-stack__header {
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
     border-radius: var(--radius-lg);
-    padding: 28px 24px;
+    padding: 20px 24px 20px 28px;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 12px;
+    align-items: flex-start;
+    justify-content: space-between;
+    text-align: left;
+    gap: 20px;
     cursor: pointer;
     position: relative;
     transition:
-        border-color var(--transition-smooth),
-        box-shadow var(--transition-smooth),
-        transform var(--transition-smooth),
+        border-color var(--transition-normal),
+        box-shadow var(--transition-normal),
+        transform var(--transition-normal),
         min-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
     user-select: none;
-    min-height: 160px;
+    min-height: 200px;
 }
 
 /* When expanded, header needs higher z-index to sit above the cards container */
@@ -948,18 +947,20 @@ body {
 }
 
 .card-stack__header:hover {
-    transform: translateY(-6px);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.06);
 }
 
 /* Expanded/expanding header — compact horizontal bar */
 .card-stack.expanding .card-stack__header,
 .card-stack.expanded .card-stack__header {
     min-height: 0;
-    padding: 14px 24px;
+    padding: 14px 18px;
     flex-direction: row;
     text-align: left;
-    justify-content: flex-start;
-    gap: 16px;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
 }
 
 .card-stack.expanding .card-stack__header:hover,
@@ -972,6 +973,14 @@ body {
 .card-stack[data-category="risk"] .card-stack__header { border-top: 3px solid var(--red); }
 .card-stack[data-category="ratios"] .card-stack__header { border-top: 3px solid var(--accent); }
 .card-stack[data-category="volume"] .card-stack__header { border-top: 3px solid var(--yellow); }
+
+/* Remove the stacked card peek backgrounds when not needed */
+.card-stack.expanded .card-stack__header,
+.card-stack.expanding .card-stack__header {
+    box-shadow: none;
+    border-bottom: 1px solid var(--border-light);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
 
 /* Stacked card peek — ghost cards always in DOM, faded in/out via opacity */
 .card-stack::before,
@@ -1018,8 +1027,9 @@ body {
 .card-stack__info {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 1;
     transition: align-items 0s 0.15s; /* delay layout shift */
 }
 
@@ -1029,50 +1039,105 @@ body {
 }
 
 .card-stack__name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.2px;
+    font-size: 60px;
+    line-height: 0.95;
+    font-weight: 700;
+    color: #1D1D1F;
+    letter-spacing: -1.8px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
-.card-stack__meta {
-    font-size: 12px;
-    color: var(--text-muted);
+.card-stack__desc {
+    max-width: 70%;
+    font-size: 16px;
+    line-height: 1.4;
+    font-weight: 400;
+    color: #6E6E73;
+    letter-spacing: -0.15px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.card-stack__score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: flex-start;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .card-stack__grade {
-    font-size: 22px;
+    font-size: 72px;
+    line-height: 0.9;
     font-weight: 700;
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    padding: 6px 16px;
-    border-radius: 8px;
-    white-space: nowrap;
-    transition: font-size 0.3s ease, padding 0.3s ease;
+    letter-spacing: -2px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+.card-stack__points {
+    font-size: 15px;
+    line-height: 1;
+    font-weight: 600;
+    color: #8E8E93;
+    letter-spacing: -0.2px;
+}
+
+.card-stack__score--green .card-stack__grade { color: #1B8A3F; }
+.card-stack__score--yellow .card-stack__grade { color: #996100; }
+.card-stack__score--red .card-stack__grade { color: var(--red); }
+.card-stack__score--muted .card-stack__grade { color: #8E8E93; }
+
+.card-stack.expanding .card-stack__name,
+.card-stack.expanded .card-stack__name {
+    font-size: 17px;
+    line-height: 1.05;
+    letter-spacing: -0.3px;
+    font-weight: 600;
+}
+
+.card-stack.expanding .card-stack__desc,
+.card-stack.expanded .card-stack__desc {
+    display: none;
 }
 
 .card-stack.expanding .card-stack__grade,
 .card-stack.expanded .card-stack__grade {
-    font-size: 14px;
-    padding: 4px 12px;
-    margin-left: auto;
+    font-size: 22px;
+    letter-spacing: -0.4px;
 }
 
-.card-stack__grade--green { color: #1B8A3F; background: var(--green-dim); }
-.card-stack__grade--yellow { color: #996100; background: var(--yellow-dim); }
-.card-stack__grade--red { color: var(--red); background: var(--red-dim); }
+.card-stack.expanding .card-stack__points,
+.card-stack.expanded .card-stack__points {
+    font-size: 11px;
+    letter-spacing: 0;
+}
 
 .card-stack__chevron {
-    width: 16px;
-    height: 16px;
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 20px;
+    height: 20px;
     color: var(--text-muted);
-    transition: transform var(--transition-smooth);
-    flex-shrink: 0;
+    opacity: 0.4;
+    transition: transform var(--transition-smooth), opacity var(--transition-smooth);
+}
+
+.card-stack__header:hover .card-stack__chevron {
+    opacity: 0.7;
 }
 
 .card-stack.expanding .card-stack__chevron,
 .card-stack.expanded .card-stack__chevron {
     transform: rotate(180deg);
+    opacity: 0.7;
+    position: static;
 }
 
 /* Cards container — collapsed by default, JS measures exact height for smooth animation */
@@ -1132,12 +1197,21 @@ body {
         width: 100%;
     }
     .card-stack__header {
-        min-height: 120px;
-        padding: 20px 16px;
+        min-height: 160px;
+        padding: 18px 20px;
+    }
+    .card-stack__name {
+        font-size: 44px;
+    }
+    .card-stack__desc {
+        max-width: 100%;
+        font-size: 14px;
     }
     .card-stack__grade {
-        font-size: 18px;
-        padding: 4px 12px;
+        font-size: 48px;
+    }
+    .card-stack__points {
+        font-size: 13px;
     }
 }
 

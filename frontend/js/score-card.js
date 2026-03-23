@@ -252,6 +252,13 @@ const CATEGORY_BENCHMARKS = {
     volume: [],
 };
 
+const CATEGORY_DESCRIPTIONS = {
+    performance: "Core profitability and trade quality metrics including win rate, factor strength, and expectancy.",
+    risk: "Downside exposure and loss control across drawdown depth, average losses, and adverse outliers.",
+    ratios: "Risk-adjusted efficiency via Sharpe, Sortino, and risk-to-reward balance.",
+    volume: "Execution activity and trade flow composition, including total trades, side mix, and streak behavior.",
+};
+
 function computeCategoryScore(stats, categoryKey) {
     const keys = CATEGORY_BENCHMARKS[categoryKey];
     if (!keys || keys.length === 0) return null;
@@ -299,18 +306,24 @@ function computeCategoryScore(stats, categoryKey) {
 
 function renderCardStack(categoryKey, categoryName, cardCount, cardsHtml, stats) {
     const catScore = stats ? computeCategoryScore(stats, categoryKey) : null;
-    const gradeHtml = catScore
-        ? `<span class="card-stack__grade ${catScore.score >= 70 ? "card-stack__grade--green" : catScore.score >= 40 ? "card-stack__grade--yellow" : "card-stack__grade--red"}">${catScore.score} ${catScore.grade}</span>`
-        : "";
+    const scoreClass = catScore
+        ? (catScore.score >= 70 ? "card-stack__score--green" : catScore.score >= 40 ? "card-stack__score--yellow" : "card-stack__score--red")
+        : "card-stack__score--muted";
+    const grade = catScore ? catScore.grade : "—";
+    const points = catScore ? `${catScore.score} Points` : "No score";
+    const description = CATEGORY_DESCRIPTIONS[categoryKey] || `${cardCount} metrics in this category.`;
 
     return `
         <div class="card-stack" data-category="${categoryKey}">
             <div class="card-stack__header" onclick="toggleCardStack(this.parentElement)">
                 <div class="card-stack__info">
                     <div class="card-stack__name">${categoryName}</div>
-                    <div class="card-stack__meta">${cardCount} metrics</div>
+                    <div class="card-stack__desc">${description}</div>
                 </div>
-                ${gradeHtml}
+                <div class="card-stack__score ${scoreClass}">
+                    <div class="card-stack__grade">${grade}</div>
+                    <div class="card-stack__points">${points}</div>
+                </div>
                 <svg class="card-stack__chevron" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
                 </svg>
