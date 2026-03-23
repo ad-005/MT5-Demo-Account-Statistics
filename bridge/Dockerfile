@@ -142,19 +142,15 @@ PREBAKE_EOF
 # Copy remaining app files
 COPY bridge_server.py /app/bridge_server.py
 COPY setup_and_run.sh /app/setup_and_run.sh
-RUN sed -i 's/\r$//' /app/setup_and_run.sh && chmod +x /app/setup_and_run.sh
+COPY entrypoint-headless.sh /app/entrypoint-headless.sh
+RUN sed -i 's/\r$//' /app/setup_and_run.sh /app/entrypoint-headless.sh && \
+    chmod +x /app/setup_and_run.sh /app/entrypoint-headless.sh
 
 EXPOSE 8080
 
-# Reset DISPLAY for runtime (base image entrypoint uses :0)
 ENV DISPLAY=:0
 
-# Base image entrypoint env vars
-ENV RUN_AS_ROOT=yes
-ENV USE_XVFB=yes
-ENV XVFB_SERVER=:0
-ENV XVFB_SCREEN=0
-ENV XVFB_RESOLUTION=1024x768x24
-
-# Base image ENTRYPOINT (/usr/bin/entrypoint) handles Xvfb, then execs CMD
+# Override base image entrypoint — ours only starts Xvfb (headless).
+# The base entrypoint also launches XRDP, Xfce, etc. which waste CPU/RAM.
+ENTRYPOINT ["/app/entrypoint-headless.sh"]
 CMD ["/app/setup_and_run.sh"]

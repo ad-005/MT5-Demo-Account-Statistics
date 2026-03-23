@@ -159,7 +159,9 @@ body {
     flex: 1;
     margin-left: 260px;
     padding: 28px 32px;
-    max-width: 1400px;
+    width: calc(100vw - 260px);
+    max-width: none;
+    min-width: 0;
 }
 
 /* ========================================================================
@@ -1701,6 +1703,7 @@ td.negative {
     .main {
         margin-left: 0;
         padding: 20px 16px;
+        width: 100%;
     }
     .app {
         flex-direction: column;

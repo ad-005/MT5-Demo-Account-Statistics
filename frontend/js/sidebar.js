@@ -37,7 +37,12 @@ function renderSidebarAccounts(selectedId) {
 }
 
 function sidebarAccountClick(id) {
-    document.dispatchEvent(new CustomEvent("sidebar:accountclick", { detail: { id } }));
+    const isDashboardPage = window.location.pathname === "/" || window.location.pathname === "/index.html";
+    if (isDashboardPage) {
+        document.dispatchEvent(new CustomEvent("sidebar:accountclick", { detail: { id } }));
+        return;
+    }
+    window.location.href = `/?account_id=${encodeURIComponent(id)}`;
 }
 
 async function sidebarRemoveAccount(id) {

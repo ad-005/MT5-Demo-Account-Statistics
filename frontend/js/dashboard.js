@@ -6,6 +6,7 @@ let _refreshFab = null; // floating refresh button element
 let _snapshotFab = null; // floating snapshot button element
 let _refreshing = false; // guard against double-clicks
 let _currentStats = null; // last loaded stats for snapshot scoring
+let _pendingAccountIdFromUrl = null;
 
 // BENCHMARKS, evalBenchmark, computeOverallScore, renderScoreCard, toggleScoreBreakdown
 // are defined in score-card.js (loaded before this file).
@@ -13,6 +14,7 @@ let _currentStats = null; // last loaded stats for snapshot scoring
 // STAT_CATEGORIES and STAT_TOOLTIPS removed — replaced by Signal Graph (stats-web.js)
 
 document.addEventListener("DOMContentLoaded", () => {
+    _pendingAccountIdFromUrl = new URLSearchParams(window.location.search).get("account_id");
     initSidebar();
     checkDocker();
     loadAccounts();
@@ -236,6 +238,15 @@ async function buildImage() {
 async function loadAccounts() {
     await loadSidebarAccounts();
     accounts = window.sidebarAccounts;
+    if (_pendingAccountIdFromUrl && accounts.some(a => a.id === _pendingAccountIdFromUrl)) {
+        const idFromUrl = _pendingAccountIdFromUrl;
+        _pendingAccountIdFromUrl = null;
+        await selectAccount(idFromUrl);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("account_id");
+        window.history.replaceState({}, "", url.pathname + (url.search ? `?${url.searchParams.toString()}` : ""));
+        return;
+    }
     renderSidebarAccounts(selectedAccountId);
 }
 
