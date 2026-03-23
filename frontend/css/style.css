@@ -899,245 +899,254 @@ body {
 }
 
 /* ========================================================================
-   Card Stacks (collapsible category groups) — square card grid layout
+   Card Stacks (collapsible category groups) — flat 2D card layout
    ======================================================================== */
 
 .card-stacks-grid {
     display: flex;
-    flex-wrap: wrap;
+    align-items: flex-start;
     gap: 20px;
     margin-bottom: 28px;
 }
 
-.card-stack {
-    position: relative;
-    isolation: isolate;
-    width: calc(50% - 10px);
-    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* The header card — square-ish, centered content */
-.card-stack__header {
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    padding: 28px 24px;
+.card-stacks-grid__column {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 12px;
-    cursor: pointer;
-    position: relative;
-    transition:
-        border-color var(--transition-smooth),
-        box-shadow var(--transition-smooth),
-        transform var(--transition-smooth),
-        min-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-        padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
-    user-select: none;
-    min-height: 160px;
+    gap: 20px;
+    width: calc(50% - 10px);
 }
 
-/* When expanded, header needs higher z-index to sit above the cards container */
-.card-stack.expanded .card-stack__header,
-.card-stack.collapsing .card-stack__header {
-    z-index: 4;
+.card-stack {
+    --cat-color: var(--accent);
+    --cat-tint: rgba(0, 122, 255, 0.18);
+    --stack-fly-offset: -30px;
+    width: 100%;
+}
+
+.card-stack[data-category="performance"] {
+    --cat-color: var(--green);
+    --cat-tint: rgba(52, 199, 89, 0.18);
+}
+
+.card-stack[data-category="risk"] {
+    --cat-color: var(--red);
+    --cat-tint: rgba(255, 59, 48, 0.18);
+}
+
+.card-stack[data-category="ratios"] {
+    --cat-color: var(--accent);
+    --cat-tint: rgba(0, 122, 255, 0.18);
+}
+
+.card-stack[data-category="volume"] {
+    --cat-color: var(--yellow);
+    --cat-tint: rgba(255, 149, 0, 0.18);
+}
+
+.card-stack__header {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-top: 3px solid var(--cat-color);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px 20px 28px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    text-align: left;
+    gap: 20px;
+    cursor: pointer;
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal), transform var(--transition-normal);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+    user-select: none;
+    min-height: 200px;
+}
+
+.card-stack__header::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: top;
+    background: linear-gradient(to bottom, var(--cat-tint) 0%, rgba(255, 255, 255, 0) 68%);
+    transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1), opacity 380ms ease;
+}
+
+.card-stack.expanded .card-stack__header::before,
+.card-stack.expanding .card-stack__header::before {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+.card-stack__header > * {
+    position: relative;
+    z-index: 1;
 }
 
 .card-stack__header:hover {
-    transform: translateY(-6px);
-}
-
-/* Expanded/expanding header — compact horizontal bar */
-.card-stack.expanding .card-stack__header,
-.card-stack.expanded .card-stack__header {
-    min-height: 0;
-    padding: 14px 24px;
-    flex-direction: row;
-    text-align: left;
-    justify-content: flex-start;
-    gap: 16px;
-}
-
-.card-stack.expanding .card-stack__header:hover,
-.card-stack.expanded .card-stack__header:hover {
-    transform: none;
-}
-
-/* Category color — top border accent */
-.card-stack[data-category="performance"] .card-stack__header { border-top: 3px solid var(--green); }
-.card-stack[data-category="risk"] .card-stack__header { border-top: 3px solid var(--red); }
-.card-stack[data-category="ratios"] .card-stack__header { border-top: 3px solid var(--accent); }
-.card-stack[data-category="volume"] .card-stack__header { border-top: 3px solid var(--yellow); }
-
-/* Stacked card peek — ghost cards always in DOM, faded in/out via opacity */
-.card-stack::before,
-.card-stack::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.35s ease;
-}
-
-.card-stack::before {
-    transform: translate(6px, 6px);
-    z-index: -1;
-}
-
-.card-stack::after {
-    transform: translate(12px, 12px);
-    z-index: -2;
-}
-
-/* Visible only when fully collapsed — fade in after FLIP settles */
-.card-stack:not(.expanded):not(.collapsing):not(.expanding)::before {
-    opacity: 0.85;
-}
-
-.card-stack:not(.expanded):not(.collapsing):not(.expanding)::after {
-    opacity: 0.6;
-}
-
-/* Extra space when fully collapsed to accommodate the peek offset */
-.card-stack:not(.expanded):not(.collapsing):not(.expanding) {
-    padding-bottom: 14px;
-    padding-right: 14px;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.06);
 }
 
 .card-stack__info {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    transition: align-items 0s 0.15s; /* delay layout shift */
-}
-
-.card-stack.expanding .card-stack__info,
-.card-stack.expanded .card-stack__info {
     align-items: flex-start;
+    gap: 8px;
+    flex: 1;
 }
 
 .card-stack__name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.2px;
-}
-
-.card-stack__meta {
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-.card-stack__grade {
-    font-size: 22px;
+    font-size: 60px;
+    line-height: 0.95;
     font-weight: 700;
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    padding: 6px 16px;
-    border-radius: 8px;
+    color: #1D1D1F;
+    letter-spacing: -1.8px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+.card-stack__desc {
+    max-width: 72%;
+    font-size: 16px;
+    line-height: 1.4;
+    font-weight: 400;
+    color: #6E6E73;
+    letter-spacing: -0.15px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.card-stack__score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: flex-start;
+    gap: 4px;
     white-space: nowrap;
-    transition: font-size 0.3s ease, padding 0.3s ease;
-}
-
-.card-stack.expanding .card-stack__grade,
-.card-stack.expanded .card-stack__grade {
-    font-size: 14px;
-    padding: 4px 12px;
-    margin-left: auto;
-}
-
-.card-stack__grade--green { color: #1B8A3F; background: var(--green-dim); }
-.card-stack__grade--yellow { color: #996100; background: var(--yellow-dim); }
-.card-stack__grade--red { color: var(--red); background: var(--red-dim); }
-
-.card-stack__chevron {
-    width: 16px;
-    height: 16px;
-    color: var(--text-muted);
-    transition: transform var(--transition-smooth);
     flex-shrink: 0;
 }
 
-.card-stack.expanding .card-stack__chevron,
-.card-stack.expanded .card-stack__chevron {
-    transform: rotate(180deg);
+.card-stack__grade {
+    font-size: 72px;
+    line-height: 0.9;
+    font-weight: 700;
+    letter-spacing: -2px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
 
-/* Cards container — collapsed by default, JS measures exact height for smooth animation */
+.card-stack__points {
+    font-size: 15px;
+    line-height: 1;
+    font-weight: 700;
+    color: #8E8E93;
+    letter-spacing: -0.2px;
+}
+
+.card-stack__score--green .card-stack__grade { color: #1B8A3F; }
+.card-stack__score--yellow .card-stack__grade { color: #996100; }
+.card-stack__score--red .card-stack__grade { color: var(--red); }
+.card-stack__score--muted .card-stack__grade { color: #8E8E93; }
+
+.card-stack__chevron {
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    width: 20px;
+    height: 20px;
+    color: var(--text-muted);
+    opacity: 0.45;
+    transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity var(--transition-smooth);
+}
+
+.card-stack__header:hover .card-stack__chevron {
+    opacity: 0.72;
+}
+
+.card-stack.expanded .card-stack__chevron,
+.card-stack.expanding .card-stack__chevron {
+    transform: rotate(180deg);
+    opacity: 0.72;
+}
+
 .card-stack__cards {
     height: 0;
     overflow: hidden;
-    transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: height 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .card-stack__cards .stats-grid {
     margin-top: 12px;
     margin-bottom: 0;
-    perspective: 600px;
 }
 
-/* Individual card pop-in animation */
 .card-stack__cards .stat-card {
     opacity: 0;
-    transform: translateY(-8px) rotateX(-4deg);
-    transform-origin: top center;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transform: translateX(var(--stack-fly-offset)) scale(0.985);
+    transition:
+        opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--stagger-delay, 0ms);
+    will-change: transform, opacity;
 }
 
-.card-stack.expanded .card-stack__cards .stat-card {
+.card-stack.expanded .card-stack__cards .stat-card,
+.card-stack.expanding .card-stack__cards .stat-card {
     opacity: 1;
-    transform: translateY(0) rotateX(0);
+    transform: translateX(0) scale(1);
 }
 
-/* Staggered delays for expand */
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(1) { transition-delay: 0.04s; }
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(2) { transition-delay: 0.08s; }
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(3) { transition-delay: 0.12s; }
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(4) { transition-delay: 0.16s; }
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(5) { transition-delay: 0.20s; }
-.card-stack.expanded .card-stack__cards .stat-card:nth-child(6) { transition-delay: 0.24s; }
-
-/* Collapsing: stat cards fade out quickly (no stagger needed) */
 .card-stack.collapsing .card-stack__cards .stat-card {
     opacity: 0;
-    transform: translateY(-6px) scale(0.97);
-    transition: opacity 0.15s ease, transform 0.15s ease;
-    transition-delay: 0s;
-}
-
-/* Both expanded and collapsing states take full width */
-.card-stack.expanding,
-.card-stack.expanded,
-.card-stack.collapsing {
-    width: 100%;
+    transform: translateX(calc(var(--stack-fly-offset) * -0.6)) scale(0.985);
+    transition-duration: 220ms;
+    transition-delay: 0ms;
 }
 
 @media (max-width: 768px) {
     .card-stacks-grid {
+        flex-direction: column;
         gap: 16px;
     }
+
+    .card-stacks-grid__column {
+        width: 100%;
+        gap: 16px;
+    }
+
     .card-stack {
         width: 100%;
+        --stack-fly-offset: -24px;
     }
+
     .card-stack__header {
-        min-height: 120px;
-        padding: 20px 16px;
+        min-height: 160px;
+        padding: 18px 20px;
     }
+
+    .card-stack__name {
+        font-size: 44px;
+    }
+
+    .card-stack__desc {
+        max-width: 100%;
+        font-size: 14px;
+    }
+
     .card-stack__grade {
-        font-size: 18px;
-        padding: 4px 12px;
+        font-size: 48px;
+    }
+
+    .card-stack__points {
+        font-size: 13px;
     }
 }
 

@@ -252,6 +252,13 @@ const CATEGORY_BENCHMARKS = {
     volume: [],
 };
 
+const CATEGORY_DESCRIPTIONS = {
+    performance: "Core profitability and trade quality metrics including win rate, factor strength, and expectancy.",
+    risk: "Downside exposure and loss control across drawdown depth, average losses, and adverse outliers.",
+    ratios: "Risk-adjusted efficiency via Sharpe, Sortino, and risk-to-reward balance.",
+    volume: "Execution activity and trade flow composition, including total trades, side mix, and streak behavior.",
+};
+
 function computeCategoryScore(stats, categoryKey) {
     const keys = CATEGORY_BENCHMARKS[categoryKey];
     if (!keys || keys.length === 0) return null;
@@ -299,18 +306,24 @@ function computeCategoryScore(stats, categoryKey) {
 
 function renderCardStack(categoryKey, categoryName, cardCount, cardsHtml, stats) {
     const catScore = stats ? computeCategoryScore(stats, categoryKey) : null;
-    const gradeHtml = catScore
-        ? `<span class="card-stack__grade ${catScore.score >= 70 ? "card-stack__grade--green" : catScore.score >= 40 ? "card-stack__grade--yellow" : "card-stack__grade--red"}">${catScore.score} ${catScore.grade}</span>`
-        : "";
+    const scoreClass = catScore
+        ? (catScore.score >= 70 ? "card-stack__score--green" : catScore.score >= 40 ? "card-stack__score--yellow" : "card-stack__score--red")
+        : "card-stack__score--muted";
+    const grade = catScore ? catScore.grade : "—";
+    const points = catScore ? `${catScore.score} Points` : "No score";
+    const description = CATEGORY_DESCRIPTIONS[categoryKey] || `${cardCount} metrics in this category.`;
 
     return `
         <div class="card-stack" data-category="${categoryKey}">
             <div class="card-stack__header" onclick="toggleCardStack(this.parentElement)">
                 <div class="card-stack__info">
                     <div class="card-stack__name">${categoryName}</div>
-                    <div class="card-stack__meta">${cardCount} metrics</div>
+                    <div class="card-stack__desc">${description}</div>
                 </div>
-                ${gradeHtml}
+                <div class="card-stack__score ${scoreClass}">
+                    <div class="card-stack__grade">${grade}</div>
+                    <div class="card-stack__points">${points}</div>
+                </div>
                 <svg class="card-stack__chevron" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
                     <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
                 </svg>
@@ -321,39 +334,55 @@ function renderCardStack(categoryKey, categoryName, cardCount, cardsHtml, stats)
         </div>`;
 }
 
-/**
- * FLIP-animate sibling card-stacks so they glide to new positions during reflow.
- * Call before the DOM change, returns a function to call after.
- */
-function _flipSiblings(grid, skip) {
-    if (!grid) return () => {};
-    const stacks = [...grid.querySelectorAll(".card-stack")];
-    const before = stacks.map(s => s.getBoundingClientRect());
+const STACK_ANIM_MS = {
+    reveal: 420,
+    hide: 260,
+};
+const STACK_CARD_STAGGER_MS = 55;
+let cardStackAnimating = false;
 
-    return () => {
-        stacks.forEach((s, i) => {
-            if (s === skip) return; // the toggled card animates via CSS width
-            const after = s.getBoundingClientRect();
-            const dx = before[i].left - after.left;
-            const dy = before[i].top - after.top;
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+function _nextFrame() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
 
-            s.style.transform = `translate(${dx}px, ${dy}px)`;
-            s.style.transition = "none";
-            // Force reflow so the starting transform is registered
-            s.offsetHeight;
-            s.style.transition = "transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)";
-            s.style.transform = "";
-        });
+function _waitForTransition(el, propertyName, timeoutMs) {
+    return new Promise(resolve => {
+        let done = false;
+        const timeout = setTimeout(() => {
+            if (done) return;
+            done = true;
+            el.removeEventListener("transitionend", onEnd);
+            resolve();
+        }, timeoutMs);
 
-        // Clean up inline styles after animation settles
-        setTimeout(() => {
-            stacks.forEach(s => {
-                s.style.transition = "";
-                s.style.transform = "";
-            });
-        }, 500);
-    };
+        const onEnd = (e) => {
+            if (done) return;
+            if (e.target !== el || e.propertyName !== propertyName) return;
+            done = true;
+            clearTimeout(timeout);
+            el.removeEventListener("transitionend", onEnd);
+            resolve();
+        };
+
+        el.addEventListener("transitionend", onEnd);
+    });
+}
+
+function _getCardSide(el, grid) {
+    const gridRect = grid.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const singleColumn = window.matchMedia("(max-width: 768px)").matches || elRect.width >= gridRect.width - 2;
+    if (singleColumn) return "left";
+    const elCenter = elRect.left + (elRect.width / 2);
+    const gridCenter = gridRect.left + (gridRect.width / 2);
+    return elCenter > gridCenter ? "right" : "left";
+}
+
+function _setCardStagger(cards) {
+    const statCards = cards.querySelectorAll(".stat-card");
+    statCards.forEach((card, index) => {
+        card.style.setProperty("--stagger-delay", `${index * STACK_CARD_STAGGER_MS}ms`);
+    });
 }
 
 function toggleCardStack(el) {
@@ -361,118 +390,52 @@ function toggleCardStack(el) {
     if (!cards) return;
 
     // Prevent interaction during any in-progress animation
-    if (el.classList.contains("collapsing") || el.classList.contains("expanding")) return;
+    if (cardStackAnimating || el.classList.contains("animating")) return;
 
     const grid = el.closest(".card-stacks-grid");
+    if (!grid) return;
 
+    cardStackAnimating = true;
     if (el.classList.contains("expanded")) {
-        _collapseStack(el, cards, grid);
+        _collapseStack(el, cards).finally(() => {
+            cardStackAnimating = false;
+        });
     } else {
-        _expandStack(el, cards, grid);
+        _expandStack(el, cards, grid).finally(() => {
+            cardStackAnimating = false;
+        });
     }
 }
 
-function _expandStack(el, cards, grid) {
-    // Phase 1: width expands to 100%, header reshapes, siblings FLIP-slide
-    const play = _flipSiblings(grid, el);
-    el.classList.add("expanding");
-    el.offsetHeight; // force layout at new state
-    play();
+async function _expandStack(el, cards, grid) {
+    el.classList.add("animating", "expanding");
+    try {
+        const side = _getCardSide(el, grid);
+        const flyOffset = side === "right" ? 36 : -36;
+        el.style.setProperty("--stack-fly-offset", `${flyOffset}px`);
+        _setCardStagger(cards);
 
-    // Phase 2: after width transition completes, reveal content
-    setTimeout(() => {
+        cards.style.height = "0px";
         el.classList.add("expanded");
-        el.classList.remove("expanding");
-
-        const targetHeight = cards.scrollHeight;
-        cards.style.height = "0";
-        el.offsetHeight; // force layout
-        cards.style.height = targetHeight + "px";
-
-        cards.addEventListener("transitionend", function handler(e) {
-            if (e.target !== cards || e.propertyName !== "height") return;
-            cards.style.height = "auto";
-            cards.removeEventListener("transitionend", handler);
-        });
-    }, 400); // matches CSS width transition duration
+        await _nextFrame();
+        cards.style.height = `${cards.scrollHeight}px`;
+        await _waitForTransition(cards, "height", STACK_ANIM_MS.reveal + 180);
+        cards.style.height = "auto";
+    } finally {
+        el.classList.remove("animating", "expanding");
+    }
 }
 
-function _collapseStack(el, cards, grid) {
-    // Phase 1: stat cards fade out, content height collapses
-    el.classList.add("collapsing");
-    cards.style.height = cards.scrollHeight + "px";
-    el.offsetHeight; // force layout before animating
-
-    // Start collapsing after a brief moment so stat card fade-out is visible
-    setTimeout(() => {
-        cards.style.height = "0";
-    }, 50);
-
-    // Phase 2: after content collapses, FLIP siblings then collapse el width
-    cards.addEventListener("transitionend", function handler(e) {
-        if (e.target !== cards || e.propertyName !== "height") return;
-        cards.removeEventListener("transitionend", handler);
-
-        // Capture sibling positions BEFORE layout change (el still at 100%)
-        const stacks = [...grid.querySelectorAll(".card-stack")];
-        const befores = stacks.map(s => s.getBoundingClientRect());
-
-        // Disable el's CSS transition so layout instantly settles at 50%.
-        // Without this, getBoundingClientRect() after class removal reads from
-        // the transition start frame (100%), making before≈after and delta≈0.
-        el.style.transition = "none";
-        el.classList.remove("expanded", "collapsing");
+async function _collapseStack(el, cards) {
+    el.classList.add("animating", "collapsing");
+    try {
+        cards.style.height = `${cards.scrollHeight}px`;
+        await _nextFrame();
+        el.classList.remove("expanded");
+        cards.style.height = "0px";
+        await _waitForTransition(cards, "height", STACK_ANIM_MS.hide + 180);
         cards.style.height = "";
-        el.offsetHeight; // force layout at 50% — now correct "after" positions
-
-        // Compute how much wider el was (typically ~2x for 50%→100%)
-        const elAfterRect = el.getBoundingClientRect();
-        const elIdx = stacks.indexOf(el);
-        const widthRatio = elAfterRect.width > 0 ? befores[elIdx].width / elAfterRect.width : 1;
-
-        // Visually restore el to its "before" width via scaleX — no layout impact.
-        // Layout is already at 50% (correct for FLIP below), but el visually
-        // still appears 100% wide; then we animate it contracting to natural width.
-        const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
-        if (widthRatio > 1.01) {
-            el.style.transformOrigin = "left center";
-            el.style.transform = `scaleX(${widthRatio.toFixed(4)})`;
-        }
-
-        // FLIP: compute deltas and apply all starting transforms (no transitions yet)
-        const flips = [];
-        stacks.forEach((s, i) => {
-            if (s === el) return;
-            const after = s.getBoundingClientRect();
-            const dx = befores[i].left - after.left;
-            const dy = befores[i].top - after.top;
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-            s.style.transition = "none";
-            s.style.transform = `translate(${dx}px, ${dy}px)`;
-            flips.push(s);
-        });
-
-        // Single reflow to commit ALL starting states at once (siblings + el scaleX)
-        el.offsetHeight;
-
-        // Animate all siblings from starting position → natural position
-        flips.forEach(s => {
-            s.style.transition = `transform 0.4s ${EASE}`;
-            s.style.transform = "";
-        });
-
-        // Animate el's scaleX from widthRatio → 1 (simultaneous with sibling FLIP)
-        if (widthRatio > 1.01) {
-            el.style.transition = `transform 0.4s ${EASE}`;
-            el.style.transform = ""; // animate to natural (scaleX 1)
-        }
-
-        // Clean up all inline overrides after animation settles
-        setTimeout(() => {
-            el.style.transition = "";
-            el.style.transform = "";
-            el.style.transformOrigin = "";
-            stacks.forEach(s => { s.style.transition = ""; s.style.transform = ""; });
-        }, 450);
-    });
+    } finally {
+        el.classList.remove("animating", "collapsing");
+    }
 }
