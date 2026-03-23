@@ -193,35 +193,38 @@ function renderReportDetail(r) {
             ${renderScoreCard(r.stats)}
 
             <div class="card-stacks-grid">
-            ${renderCardStack("performance", "Performance", 6, [
-                simpleStatCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0),
-                simpleStatCard("Win Rate", s.win_rate + "%", s.win_rate >= 50),
-                simpleStatCard("Profit Factor", s.profit_factor.toFixed(2)),
-                simpleStatCard("Avg Win", "$" + s.average_profit.toFixed(2), true),
-                simpleStatCard("Largest Win", "$" + s.largest_win.toFixed(2), true),
-                simpleStatCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0),
-            ].join(""), r.stats)}
+                <div class="card-stacks-grid__column">
+                ${renderCardStack("performance", "Performance", 6, [
+                    simpleStatCard("Net Profit", "$" + s.net_profit.toFixed(2), s.net_profit >= 0),
+                    simpleStatCard("Win Rate", s.win_rate + "%", s.win_rate >= 50),
+                    simpleStatCard("Profit Factor", s.profit_factor.toFixed(2)),
+                    simpleStatCard("Avg Win", "$" + s.average_profit.toFixed(2), true),
+                    simpleStatCard("Largest Win", "$" + s.largest_win.toFixed(2), true),
+                    simpleStatCard("Expectancy", "$" + s.expectancy.toFixed(2), s.expectancy >= 0),
+                ].join(""), r.stats)}
 
-            ${renderCardStack("risk", "Risk", 4, [
-                simpleStatCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false),
-                simpleStatCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false),
-                simpleStatCard("Avg Loss", "$" + s.average_loss.toFixed(2), false),
-                simpleStatCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false),
-            ].join(""), r.stats)}
+                ${renderCardStack("ratios", "Ratios", 3, [
+                    simpleStatCard("Sharpe Ratio", s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1),
+                    simpleStatCard("Sortino Ratio", s.sortino_ratio.toFixed(2), s.sortino_ratio >= 1),
+                    simpleStatCard("R:R Ratio", s.risk_reward_ratio.toFixed(2)),
+                ].join(""), r.stats)}
+                </div>
+                <div class="card-stacks-grid__column">
+                ${renderCardStack("risk", "Risk", 4, [
+                    simpleStatCard("Max Drawdown", "$" + s.max_drawdown.toFixed(2), false),
+                    simpleStatCard("Max DD %", s.max_drawdown_pct.toFixed(2) + "%", false),
+                    simpleStatCard("Avg Loss", "$" + s.average_loss.toFixed(2), false),
+                    simpleStatCard("Largest Loss", "$" + s.largest_loss.toFixed(2), false),
+                ].join(""), r.stats)}
 
-            ${renderCardStack("ratios", "Ratios", 3, [
-                simpleStatCard("Sharpe Ratio", s.sharpe_ratio.toFixed(2), s.sharpe_ratio >= 1),
-                simpleStatCard("Sortino Ratio", s.sortino_ratio.toFixed(2), s.sortino_ratio >= 1),
-                simpleStatCard("R:R Ratio", s.risk_reward_ratio.toFixed(2)),
-            ].join(""), r.stats)}
-
-            ${renderCardStack("volume", "Volume & Streaks", 5, [
-                simpleStatCard("Total Trades", s.total_trades),
-                simpleStatCard("Buy %", s.buy_percentage + "%"),
-                simpleStatCard("Sell %", s.sell_percentage + "%"),
-                simpleStatCard("Consec. Wins", s.consecutive_wins),
-                simpleStatCard("Consec. Losses", s.consecutive_losses),
-            ].join(""), r.stats)}
+                ${renderCardStack("volume", "Volume & Streaks", 5, [
+                    simpleStatCard("Total Trades", s.total_trades),
+                    simpleStatCard("Buy %", s.buy_percentage + "%"),
+                    simpleStatCard("Sell %", s.sell_percentage + "%"),
+                    simpleStatCard("Consec. Wins", s.consecutive_wins),
+                    simpleStatCard("Consec. Losses", s.consecutive_losses),
+                ].join(""), r.stats)}
+                </div>
             </div>
 
             ${renderSessionDaily(s)}
